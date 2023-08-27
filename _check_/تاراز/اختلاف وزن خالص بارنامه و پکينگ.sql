@@ -1,0 +1,33 @@
+SELECT (SELECT O.ORDER_ID
+          FROM PUR.PUR_ORDER_POSITIONS OP
+         INNER JOIN PUR.PUR_ORDERS O
+            ON OP.PUROR_ORDER_ID = O.ORDER_ID
+         WHERE OP.PUROP_ID = Z.PUROP_ID) AS ORDER_ID
+      ,Z.*
+  FROM ( --
+        SELECT DISTINCT I.COD_ITEM
+                        ,I.DES_ITEM
+                        ,OP.PUROP_ID
+                        ,OP.NUM_POS_PUROP
+                        ,APPS.APP_MAM_BILL_PKG.CNT_WAYBILL_ID_PRC(PN.WYBIL_WAYBILL_ID) CNT
+                        ,PN.QTY_WEI_PACK_PACKNR
+                        ,(SELECT PW.QTY_REL_ITEM_WYBIL
+                            FROM PUA.PUA_WAYBILLS PW
+                           WHERE PW.WAYBILL_ID = PN.WYBIL_WAYBILL_ID) AS QTY_REL_ITEM_WYBIL
+        
+          FROM PUR.PUR_ORDERS O
+         INNER JOIN PUR.PUR_ORDER_POSITIONS OP
+            ON O.ORDER_ID = OP.PUROR_ORDER_ID
+         INNER JOIN PUR.PUR_REQUEST_POSITIONS RP
+            ON OP.PURRP_PURRP_ID = RP.PURRP_ID
+         INNER JOIN MAM.MAM_ITEMS I
+            ON I.ITEM_ID = RP.ITEM_ITEM_ID
+         INNER JOIN PUR.PUR_PACKING_NUMBERS PN
+            ON PN.PUROP_PUROP_ID = OP.PUROP_ID
+         WHERE O.NUM_PGV_PUROR = &NUM_PGV_PUROR
+               AND O.NUM_MDF_PUROR = 0
+               AND OP.NUM_POS_PUROP = &NUM_POS_PUROP
+        --
+        ) Z
+ WHERE Z.CNT = 1
+ ORDER BY NUM_POS_PUROP

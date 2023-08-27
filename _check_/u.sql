@@ -1,0 +1,23 @@
+SELECT U.MEASUREMENT_UNIT_ID
+      ,U.NAM_UNIT_OF_MEASURE_MUOM
+      ,U.COD_UNIT_OF_MEASURE_MUOM
+      ,U.DES_MUOM
+      ,U.FLG_BASE_UOM_MUOM
+      ,U.DAT_DISABLE_MUOM
+      ,U.LKP_CLASS_MUOM
+      ,APPS.APP_FND_LOOKUP_PKG.GET_FARSI_MEANING_FUN(UPPER('MAM_MEASUREMENT_UNITS')
+                                                    ,UPPER('LKP_CLASS_MUOM')
+                                                    ,U.LKP_CLASS_MUOM) AS LKP_CLASS_MUOM_DES
+      ,U.LKP_TYPE_ENERGY_MUOM
+      ,APPS.APP_FND_LOOKUP_PKG.GET_FARSI_MEANING_FUN(UPPER('MAM_MEASUREMENT_UNITS')
+                                                    ,UPPER('LKP_TYPE_ENERGY_MUOM')
+                                                    ,U.LKP_TYPE_ENERGY_MUOM) AS LKP_TYPE_ENERGY_MUOM_DES
+--      ,U.*
+  FROM MAM.MAM_MEASUREMENT_UNITS U
+ WHERE 1 = 1 --
+--       AND U.NAM_UNIT_OF_MEASURE_MUOM LIKE '%' || &NAM_UNIT_OF_MEASURE_MUOM || '%'
+--       AND U.MEASUREMENT_UNIT_ID = &MEASUREMENT_UNIT_ID
+ ORDER BY NULL
+          --         ,U.NAM_UNIT_OF_MEASURE_MUOM
+         ,U.MEASUREMENT_UNIT_ID
+--   FOR UPDATE

@@ -20,7 +20,7 @@ SELECT O.ORDER_ID
        ,(SELECT U.IDE_USER_USRS || ': ' || U.NAM_USER_USRS
           FROM FND.FND_USERS U
          WHERE U.IDE_USER_USRS = DP.USER_MANAGER_ID_MDELP) AS " √ÌÌœ ò‰‰œÂ"
-       ,O.SUPCO_THPRT_COD_THPRT || CASE
+      ,O.SUPCO_THPRT_COD_THPRT || CASE
          WHEN O.SUPCO_THPRT_COD_THPRT IS NOT NULL THEN
           ': ' || (SELECT TP.DES_THPRT
                      FROM BFS.BFS_THIRD_PARTIES TP
@@ -159,8 +159,8 @@ SELECT O.ORDER_ID
                                              ,UPPER('LKP_COD_CLOSE_PURRQ')
                                              ,R.LKP_COD_CLOSE_PURRQ) AS LKP_COD_CLOSE_PURRQ_DES
 */
-  FROM --PUR.PUR_ORDERS --
-       JRN.PUR_ORDERS_JRN --
+  FROM PUR.PUR_ORDERS --
+      -- JRN.PUR_ORDERS_JRN --
         O
  INNER JOIN PUR.PUR_REQUESTS R
     ON EXISTS (SELECT NULL

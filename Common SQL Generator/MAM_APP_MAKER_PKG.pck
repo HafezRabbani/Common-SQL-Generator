@@ -105,7 +105,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
                                        ,'LKP_STA_PENDING_MTRAN'
                                        ,'FLG_HAVE_BEFOR_INP_COST_MTRAN'
                                        ,'FLG_SLC_MTRAN'
-                                       ,'LKP_COD_SYSTEM_MTRAN'
+                                       --,'LKP_COD_SYSTEM_MTRAN'
                                        ,'CCNTR_COD_CC_CCNTR_FROM'
                                        ,'SPINV_NUM_SRL_INNER_WAY'
                                        ,'LKP_TYP_MTYPE_MTRAN'
@@ -116,11 +116,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
                                        ,'ID_TRANSFER_LOCATOR_MTRAN'
                                         --,'MSINV_NAM_SUB_INVENTORY_MSINV'
                                         --,'MSLOC_SUB_INVENTORY_LOCATOR_ID'
-                                       ,'P_LKP_TYP_MTYPE_MTRAN'
-                                       ,'P_LKP_COD_SYSTEM_MTRAN'
-                                       ,'P_COD_REVISION_FOR_MTRAN'
-                                       ,'P_LKP_STA_PENDING_MTRAN'
-                                       ,'P_NAM_TRANSFER_SUBINVNTRY_MTRA'
+                                       ,'NAM_TRANSFER_SUBINVNTRY_MTRA'
                                         --,''
                                         )
       --

@@ -130,7 +130,8 @@ SELECT (SELECT 'all'
                    FROM (SELECT UPPER(TRIM('&cod_item')) AS C FROM DUAL)) OR
                (SELECT REPLACE(C, CHR(10), '')
                    FROM (SELECT UPPER(TRIM('&cod_item')) AS C FROM DUAL)) IS NULL)
-               AND NVL(I.COD_SERIAL_NUMBER_CONTROL_ITEM, 0) = 1)
+               --AND NVL(I.COD_SERIAL_NUMBER_CONTROL_ITEM, 0) = 1
+               )
    FOR UPDATE
  ORDER BY XS.MSER_SERIAL_NUMBER_ID;
 --
@@ -174,7 +175,8 @@ SELECT (SELECT 'ALL' FROM MAM.MAM_RCV_SERIAL_TRANSACTIONS WHERE ROWNUM = 1) AS N
                    FROM (SELECT UPPER(TRIM('&cod_item')) AS C FROM DUAL)) OR
                (SELECT REPLACE(C, CHR(10), '')
                    FROM (SELECT UPPER(TRIM('&cod_item')) AS C FROM DUAL)) IS NULL)
-               AND NVL(I.COD_SERIAL_NUMBER_CONTROL_ITEM, 0) = 1)
+               --AND NVL(I.COD_SERIAL_NUMBER_CONTROL_ITEM, 0) = 1
+               )
    FOR UPDATE
  ORDER BY RXS.NUM_SERIAL_MRCVS;
 -----
@@ -273,7 +275,8 @@ SELECT *
                               FROM (SELECT UPPER(TRIM('&cod_item')) AS C FROM DUAL)) OR
                           (SELECT REPLACE(C, CHR(10), '')
                               FROM (SELECT UPPER(TRIM('&cod_item')) AS C FROM DUAL)) IS NULL)
-                          AND NVL(I.COD_SERIAL_NUMBER_CONTROL_ITEM, 0) = 1)
+                          --AND NVL(I.COD_SERIAL_NUMBER_CONTROL_ITEM, 0) = 1
+                          )
                  
                  --
                  ) Z

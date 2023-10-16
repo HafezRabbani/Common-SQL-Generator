@@ -1,7 +1,16 @@
 SELECT PN.PACKING_NUMBER_ID
+      ,PN.PAKLS_PACKING_LIST_ID
       ,(SELECT W.NUM_WYB_GOV_WYBIL
           FROM PUA.PUA_WAYBILLS W
          WHERE W.WAYBILL_ID = PN.WYBIL_WAYBILL_ID) AS NUM_WYB_GOV_WYBIL
+      ,(SELECT OP.NUM_POS_PUROP
+          FROM PUR.PUR_ORDER_POSITIONS OP
+         WHERE OP.PUROP_ID = PN.PUROP_PUROP_ID) AS NUM_POS_PUROP
+      ,(SELECT RP.ID_PRODUCT_PURRP
+          FROM PUR.PUR_ORDER_POSITIONS OP
+         INNER JOIN PUR.PUR_REQUEST_POSITIONS RP
+            ON OP.PURRP_PURRP_ID = RP.PURRP_ID
+         WHERE OP.PUROP_ID = PN.PUROP_PUROP_ID) AS ID_PRODUCT_PURRP
       ,PN.TKS_PACK_PAKNR
       ,PN.WID_PACK_PAKNR
       ,PN.COD_QLY_EXT_PAKNR
@@ -41,32 +50,31 @@ SELECT PN.PACKING_NUMBER_ID
          PN
  WHERE 1 = 1
       --       AND PN.COD_ORD_ORDHE_PAKNR = &COD_ORD_ORDHE_PAKNR
-       AND PN.NUM_EXT_COIL_PAKNR IN (&NUM_EXT_COIL_PAKNR)
---       AND PN.NUM_INTERNAL_COIL_PAKNR IN (&NUM_INTERNAL_COIL_PAKNR)
-/*
-       AND
-       PN.PUROP_PUROP_ID IN ( --
-                             SELECT OP.PUROP_ID
-                               FROM PUR.PUR_ORDER_POSITIONS OP
-                              INNER JOIN PUR.PUR_ORDERS O
-                                 ON OP.PUROR_ORDER_ID = O.ORDER_ID
-                                    AND O.NUM_MDF_PUROR = 0
-                                   --AND OP.NUM_POS_PUROP LIKE '&NUM_POS_PUROP'
-                                    AND O.NUM_PGV_PUROR LIKE '&NUM_PGV_PUROR'
-                             --
-                             )
-*/
-/*
-      AND EXISTS
-( --
-       SELECT NULL
-         FROM PUA.PUA_WAYBILLS W
-        INNER JOIN PUR.PUR_ORDERS O
-           ON W.PUROR_ORDER_ID = O.ORDER_ID
-        WHERE W.WAYBILL_ID = PN.WYBIL_WAYBILL_ID
-              AND W.NUM_WYB_GOV_WYBIL IN (&NUM_WYB_GOV_WYBIL)
-              AND O.NUM_PGV_PUROR = '&NUM_PGV_PUROR'
-       --
-       )
-       */
+      --       AND PN.NUM_EXT_COIL_PAKNR IN (&NUM_EXT_COIL_PAKNR)
+      --       AND PN.NUM_INTERNAL_COIL_PAKNR IN (&NUM_INTERNAL_COIL_PAKNR)
+      /*
+             AND
+             PN.PUROP_PUROP_ID IN ( --
+                                   SELECT OP.PUROP_ID
+                                     FROM PUR.PUR_ORDER_POSITIONS OP
+                                    INNER JOIN PUR.PUR_ORDERS O
+                                       ON OP.PUROR_ORDER_ID = O.ORDER_ID
+                                          AND O.NUM_MDF_PUROR = 0
+                                         --AND OP.NUM_POS_PUROP LIKE '&NUM_POS_PUROP'
+                                          AND O.NUM_PGV_PUROR LIKE '&NUM_PGV_PUROR'
+                                   --
+                                   )
+      */
+      
+       AND EXISTS ( --
+        SELECT NULL
+          FROM PUA.PUA_WAYBILLS W
+         INNER JOIN PUR.PUR_ORDERS O
+            ON W.PUROR_ORDER_ID = O.ORDER_ID
+         WHERE W.WAYBILL_ID = PN.WYBIL_WAYBILL_ID
+              --       AND W.NUM_WYB_GOV_WYBIL IN (&NUM_WYB_GOV_WYBIL)
+               AND O.NUM_PGV_PUROR = '&NUM_PGV_PUROR'
+        --
+        )
+
 --   FOR UPDATE

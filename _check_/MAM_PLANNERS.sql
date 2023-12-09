@@ -17,4 +17,6 @@ SELECT P.COD_PLANNER_MPLNR
                                                     ,UPPER('LKP_TYP_MPLNR')
                                                     ,P.LKP_TYP_MPLNR) AS LKP_TYP_MPLNR_DES
   FROM MAM.MAM_PLANNERS P
+ WHERE 1 = 1
+       AND P.COD_PLANNER_MPLNR IN (&COD_PLANNER_MPLNR)
 -- for update

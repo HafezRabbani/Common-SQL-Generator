@@ -75,12 +75,9 @@ SELECT CASE
          WHERE 1 = 1
               --               AND I.COD_SERIAL_NUMBER_CONTROL_ITEM = 1
               --               AND I.FLG_LOT_CONTROL_ITEM = 1
-               AND
-               I.COD_ITEM LIKE
-               (SELECT REPLACE(C, CHR(10), '')
-                  FROM (SELECT UPPER(TRIM('&cod_item')) AS C FROM DUAL)) || '%'
-        --               AND I.COD_ITEM IN (&COD_ITEM)
-        --               AND I.ITEM_ID = &ITEM_ID
+              --AND I.COD_ITEM LIKE (SELECT REPLACE(C, CHR(10), '') FROM (SELECT UPPER(TRIM('&cod_item')) AS C FROM DUAL)) || '%'
+               AND I.COD_ITEM IN (&COD_ITEM)
+        --               AND I.ITEM_ID IN (&ITEM_ID)
         --
         ) D
  WHERE 1 = 1

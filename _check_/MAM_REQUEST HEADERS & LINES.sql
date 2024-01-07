@@ -4,8 +4,29 @@ SELECT H.REQUEST_HEADER_ID
       ,H.*
   FROM MAM.MAM_REQUEST_HEADERS H
  WHERE 1 = 1
-       AND H.NUM_REQUEST_MREQH LIKE TRIM('&NUM_REQUEST_LIKE')
---       AND H.NUM_REQUEST_MREQH IN (&NUM_REQUEST_IN)
+      --       AND H.NUM_REQUEST_MREQH LIKE TRIM('&NUM_REQUEST_LIKE')
+      --       AND H.NUM_REQUEST_MREQH IN (&NUM_REQUEST_IN)
+       AND EXISTS
+ (SELECT NULL
+          FROM --
+                MAM.MAM_REQUEST_LINES
+               --
+                 L
+         WHERE L.MREQH_REQUEST_HEADER_ID = H.REQUEST_HEADER_ID
+               AND ( --
+                &COD_ITEM IS NULL OR EXISTS
+                ( --
+                     SELECT NULL
+                       FROM MAM.MAM_ITEMS I
+                      WHERE L.ITEM_ITEM_ID = I.ITEM_ID
+                           --       AND I.COD_ITEM = TRIM(&COD_ITEM)
+                            AND I.COD_ITEM LIKE TRIM(&COD_ITEM) || '%'
+                     --
+                     )
+               --
+               )
+        --
+        )
 --   FOR UPDATE
 --
 ;
@@ -56,7 +77,7 @@ SELECT L.REQUEST_LINE_ID
       --
       --AND (&LKP_STA_LINE_MREQL IS NULL OR L.LKP_STA_LINE_MREQL != &LKP_STA_LINE_MREQL)
       --       AND       (&REQUEST_LINE_ID IS NULL OR L.REQUEST_LINE_ID = &REQUEST_LINE_ID)
-      /*
+      
        AND ( --
         &COD_ITEM IS NULL OR EXISTS
         ( --
@@ -69,7 +90,8 @@ SELECT L.REQUEST_LINE_ID
              )
        --
        )
-      */
+
+/*
        AND
        ( --
         EXISTS ( --
@@ -82,6 +104,7 @@ SELECT L.REQUEST_LINE_ID
                 )
        --
        )
+*/
 --   FOR UPDATE
 --
 ;

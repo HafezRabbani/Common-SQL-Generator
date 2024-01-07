@@ -1,5 +1,22 @@
 SELECT PN.PACKING_NUMBER_ID
       ,PN.PAKLS_PACKING_LIST_ID
+      ,(SELECT O.NUM_PGV_PUROR
+          FROM PUR.PUR_ORDERS O
+         INNER JOIN PUR.PUR_ORDER_POSITIONS OP
+            ON O.ORDER_ID = OP.PUROR_ORDER_ID
+         WHERE OP.PUROP_ID = PN.PUROP_PUROP_ID) AS NUM_PGV_PUROR_PN
+      ,(SELECT O.NUM_PGV_PUROR
+          FROM PUA.PUA_WAYBILLS W
+         INNER JOIN PUR.PUR_ORDERS O
+            ON W.PUROR_ORDER_ID = O.ORDER_ID
+         WHERE W.WAYBILL_ID = PN.WYBIL_WAYBILL_ID) AS NUM_PGV_PUROR_WAYBILL
+      ,(SELECT DISTINCT O.NUM_PGV_PUROR
+          FROM MAM.MAM_RCV_TRANSACTIONS RX
+         INNER JOIN PUR.PUR_ORDER_POSITIONS OP
+            ON RX.PUROP_PUROP_ID = OP.PUROP_ID
+         INNER JOIN PUR.PUR_ORDERS O
+            ON O.ORDER_ID = OP.PUROR_ORDER_ID
+         WHERE RX.PAKNR_PACKING_NUMBER_ID = PN.PACKING_NUMBER_ID) AS NUM_PGV_PUROR_RX
       ,(SELECT W.NUM_WYB_GOV_WYBIL
           FROM PUA.PUA_WAYBILLS W
          WHERE W.WAYBILL_ID = PN.WYBIL_WAYBILL_ID) AS NUM_WYB_GOV_WYBIL
@@ -26,9 +43,7 @@ SELECT PN.PACKING_NUMBER_ID
       ,PN.NUM_REF_PAKNR
       ,PN.NUM_POS_PAKNR
       ,PN.LKP_COD_INSPECTION_PAKNR
-      ,APPS.APP_FND_LOOKUP_PKG.GET_FARSI_MEANING_FUN(UPPER('PUR_PACKING_NUMBERS')
-                                                    ,UPPER('LKP_COD_INSPECTION_PAKNR')
-                                                    ,PN.LKP_COD_INSPECTION_PAKNR) AS LKP_COD_INSPECTION_PAKNR_DES
+      ,APPS.APP_FND_LOOKUP_PKG.GET_FARSI_MEANING_FUN(UPPER('PUR_PACKING_NUMBERS'), UPPER('LKP_COD_INSPECTION_PAKNR'), PN.LKP_COD_INSPECTION_PAKNR) AS LKP_COD_INSPECTION_PAKNR_DES
       ,PN.COD_LOCATOR_PAKNR
       ,PN.WYBIL_WAYBILL_ID
       ,(SELECT A3.NUM_WYB_GOV_WYBIL
@@ -37,9 +52,7 @@ SELECT PN.PACKING_NUMBER_ID
       ,PN.QTY_WEI_SUPPLIER_PAKNR
       ,PN.QTY_WEI_PACK_PACKNR
       ,PN.LKP_TYP_PACKING_PAKNR
-      ,APPS.APP_FND_LOOKUP_PKG.GET_FARSI_MEANING_FUN(UPPER('PUR_PACKING_NUMBERS')
-                                                    ,UPPER('LKP_TYP_PACKING_PAKNR')
-                                                    ,PN.LKP_TYP_PACKING_PAKNR) AS LKP_TYP_PACKING_PAKNR_DES
+      ,APPS.APP_FND_LOOKUP_PKG.GET_FARSI_MEANING_FUN(UPPER('PUR_PACKING_NUMBERS'), UPPER('LKP_TYP_PACKING_PAKNR'), PN.LKP_TYP_PACKING_PAKNR) AS LKP_TYP_PACKING_PAKNR_DES
       ,PN.COD_ORD_ORDHE_PAKNR
       ,PN.TYP_DB_ORDHE_PAKNR
       ,PN.NUM_ITEM_ORDIT_PAKNR
@@ -50,22 +63,22 @@ SELECT PN.PACKING_NUMBER_ID
          PN
  WHERE 1 = 1
       --       AND PN.COD_ORD_ORDHE_PAKNR = &COD_ORD_ORDHE_PAKNR
-      --       AND PN.NUM_EXT_COIL_PAKNR IN (&NUM_EXT_COIL_PAKNR)
-      --       AND PN.NUM_INTERNAL_COIL_PAKNR IN (&NUM_INTERNAL_COIL_PAKNR)
-      /*
-             AND
-             PN.PUROP_PUROP_ID IN ( --
-                                   SELECT OP.PUROP_ID
-                                     FROM PUR.PUR_ORDER_POSITIONS OP
-                                    INNER JOIN PUR.PUR_ORDERS O
-                                       ON OP.PUROR_ORDER_ID = O.ORDER_ID
-                                          AND O.NUM_MDF_PUROR = 0
-                                         --AND OP.NUM_POS_PUROP LIKE '&NUM_POS_PUROP'
-                                          AND O.NUM_PGV_PUROR LIKE '&NUM_PGV_PUROR'
-                                   --
-                                   )
-      */
-      
+       AND PN.NUM_EXT_COIL_PAKNR IN (&NUM_EXT_COIL_PAKNR)
+--       AND PN.NUM_INTERNAL_COIL_PAKNR IN (&NUM_INTERNAL_COIL_PAKNR)
+/*
+       AND
+       PN.PUROP_PUROP_ID IN ( --
+                             SELECT OP.PUROP_ID
+                               FROM PUR.PUR_ORDER_POSITIONS OP
+                              INNER JOIN PUR.PUR_ORDERS O
+                                 ON OP.PUROR_ORDER_ID = O.ORDER_ID
+                                    AND O.NUM_MDF_PUROR = 0
+                                   --AND OP.NUM_POS_PUROP LIKE '&NUM_POS_PUROP'
+                                    AND O.NUM_PGV_PUROR LIKE '&NUM_PGV_PUROR'
+                             --
+                             )
+*/
+/*      
        AND EXISTS ( --
         SELECT NULL
           FROM PUA.PUA_WAYBILLS W
@@ -76,5 +89,5 @@ SELECT PN.PACKING_NUMBER_ID
                AND O.NUM_PGV_PUROR = '&NUM_PGV_PUROR'
         --
         )
-
+*/
 --   FOR UPDATE

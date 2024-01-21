@@ -1,0 +1,142 @@
+SELECT I.ITEM_ID
+      ,I.COD_ITEM
+      ,I.FLG_LOT_CONTROL_ITEM
+      ,I.DES_ITEM
+  FROM MAM.MAM_ITEMS I
+ WHERE I.COD_ITEM = &COD_ITEM;
+--
+SELECT L.LOT_NUMBER_ID
+      ,L.COD_LOT_MLOT
+      ,L.FLG_DISABLE_MLOT
+      ,L.DAT_EXPIRATION_MLOT
+      ,TO_CHAR(L.DAT_EXPIRATION_MLOT
+              ,'YYYY/MM/DD HH24:MI:SS'
+              ,'NLS_CALENDAR=PERSIAN') AS DAT_EXPIRATION_MLOT_H
+      ,L.ITEM_ITEM_ID
+      ,L.LKP_STA_CURRENT_MLOT
+      ,L.LKP_STA_CURRENT_MLOT || CASE
+         WHEN L.LKP_STA_CURRENT_MLOT IS NOT NULL THEN
+          ': '
+       END ||
+       APPS.APP_FND_LOOKUP_PKG.GET_FARSI_MEANING_FUN(UPPER('MAM_LOT_NUMBERS')
+                                                    ,UPPER('LKP_STA_CURRENT_MLOT')
+                                                    ,L.LKP_STA_CURRENT_MLOT) AS LKP_STA_CURRENT_MLOT_DES
+      ,L.STA_OLD_MLOT
+      ,L.NUM_QTY_MLOT
+  FROM MAM.MAM_LOT_NUMBERS L
+ WHERE L.ITEM_ITEM_ID =
+       (SELECT I.ITEM_ID FROM MAM.MAM_ITEMS I WHERE I.COD_ITEM = &COD_ITEM)
+   FOR UPDATE
+ ORDER BY L.LOT_NUMBER_ID;
+--
+SELECT XL.MLOT_LOT_NUMBER_ID
+      ,XL.MTRAN_MATERIAL_TRANSACTION_ID
+      ,XL.QTY_PRIMARY_MTLOT
+      ,XL.QTY_TRANSACTION_MTLOT
+  FROM MAM.MAM_TRANSACTION_LOT_NUMBERS XL
+ WHERE XL.MTRAN_MATERIAL_TRANSACTION_ID IN
+       (&MATERIAL_TRANSACTION_ID1, &MATERIAL_TRANSACTION_ID2)
+       OR (&MATERIAL_TRANSACTION_ID1 = 0 AND &MATERIAL_TRANSACTION_ID2 = 0 AND
+       EXISTS (SELECT NULL
+                    FROM MAM.MAM_LOT_NUMBERS L
+                   WHERE L.LOT_NUMBER_ID = XL.MLOT_LOT_NUMBER_ID
+                         AND L.ITEM_ITEM_ID =
+                         (SELECT I.ITEM_ID
+                                FROM MAM.MAM_ITEMS I
+                               WHERE I.COD_ITEM = &COD_ITEM)))
+   FOR UPDATE
+ ORDER BY XL.MLOT_LOT_NUMBER_ID;
+--
+SELECT RXL.RCV_LOT_TRANSACTION_ID
+      ,RXL.MRCV_RCV_TRANSACTION_ID
+      ,RXL.ITEM_ITEM_ID
+      ,RXL.NUM_LOT_MRCVL
+      ,RXL.QTY_MRCVL
+  FROM MAM.MAM_RCV_LOT_TRANSACTIONS RXL
+ WHERE (RXL.MRCV_RCV_TRANSACTION_ID = &RCV_TRANSACTION_ID OR
+       &RCV_TRANSACTION_ID = 0)
+       AND
+       RXL.ITEM_ITEM_ID =
+       (SELECT I.ITEM_ID FROM MAM.MAM_ITEMS I WHERE I.COD_ITEM = &COD_ITEM)
+   FOR UPDATE
+ ORDER BY RXL.NUM_LOT_MRCVL;
+
+SELECT *
+  FROM ( --
+        SELECT 0
+               ,SUM(Z.QTY_PRIMARY_MTRAN) OVER(PARTITION BY Z.MLOT_LOT_NUMBER_ID, Z.ITEM_ITEM_ID_FOR) AS SUM_ITEM_LOT
+               ,(SELECT SUM(XX.QTY_PRIMARY_MTRAN)
+                   FROM MAM.MAM_MATERIAL_TRANSACTIONS XX
+                  WHERE XX.ITEM_ITEM_ID_FOR = Z.ITEM_ITEM_ID_FOR) AS SQ
+               ,(SELECT I.COD_ITEM
+                   FROM MAM.MAM_ITEMS I
+                  WHERE I.ITEM_ID = Z.ITEM_ITEM_ID_FOR) AS ITEM
+               ,Z.ITEM_ITEM_ID_FOR AS ITEM_ID
+               ,L.LOT_NUMBER_ID
+               ,L.COD_LOT_MLOT AS COD_LOT_MLOT
+                /*
+                ,(SELECT DISTINCT XY.MSINV_NAM_SUB_INVENTORY_MSIFOR
+                    FROM MAM.MAM_MATERIAL_TRANSACTIONS XY
+                    LEFT OUTER JOIN MAM.MAM_TRANSACTION_LOT_NUMBERS XLY
+                      ON XY.MATERIAL_TRANSACTION_ID =
+                         XLY.MTRAN_MATERIAL_TRANSACTION_ID
+                   WHERE XLY.MLOT_LOT_NUMBER_ID = L.LOT_NUMBER_ID
+                         AND
+                         XY.MATERIAL_TRANSACTION_ID = Z.MATERIAL_TRANSACTION_ID) AS INV
+                ,(SELECT DISTINCT XY.MSLOC_SUB_INVENTORY_LOCATORFOR
+                    FROM MAM.MAM_MATERIAL_TRANSACTIONS XY
+                    LEFT OUTER JOIN MAM.MAM_TRANSACTION_LOT_NUMBERS XLY
+                      ON XY.MATERIAL_TRANSACTION_ID =
+                         XLY.MTRAN_MATERIAL_TRANSACTION_ID
+                   WHERE XLY.MLOT_LOT_NUMBER_ID = L.LOT_NUMBER_ID
+                         AND
+                         XY.MATERIAL_TRANSACTION_ID = Z.MATERIAL_TRANSACTION_ID) AS LID
+                 */
+               ,L.LKP_STA_CURRENT_MLOT AS LKP_STA
+               ,Z.MTYP_TRANSACTION_TYPE_ID AS TT
+               ,Z.MLOT_LOT_NUMBER_ID AS LID
+               ,Z.MATERIAL_TRANSACTION_ID AS XID
+               ,(SELECT RX.RCV_TRANSACTION_ID
+                   FROM MAM.MAM_RCV_TRANSACTIONS RX
+                  WHERE RX.MTRAN_MATERIAL_TRANSACTION_ID =
+                        Z.MATERIAL_TRANSACTION_ID) AS RXID_BASED_ON_XID
+               ,Z.DAT_TRANSACTION_MTRAN
+               ,COUNT(Z.MATERIAL_TRANSACTION_ID) OVER(PARTITION BY Z.MLOT_LOT_NUMBER_ID) CNT_ITEM_LOT
+                /*
+                ,CASE
+                   WHEN ABS(Z.QTY_PRIMARY_MTRAN) != SUM(1)
+                    OVER(PARTITION BY Z.MATERIAL_TRANSACTION_ID) THEN
+                    '!'
+                 END AS ABNORMAL
+                 */
+               ,Z.QTY_PRIMARY_MTRAN
+               ,Z.QTY_PRIMARY_MTLOT
+               ,Z.QTY_TRANSACTION_MTLOT
+          FROM ( --
+                 SELECT DISTINCT X.QTY_PRIMARY_MTRAN
+                                 ,XL.MLOT_LOT_NUMBER_ID
+                                 ,XL.QTY_PRIMARY_MTLOT
+                                 ,XL.QTY_TRANSACTION_MTLOT
+                                 ,X.ITEM_ITEM_ID_FOR
+                                 ,X.MATERIAL_TRANSACTION_ID
+                                 ,X.MTYP_TRANSACTION_TYPE_ID
+                                 ,X.DAT_TRANSACTION_MTRAN
+                   FROM MAM.MAM_MATERIAL_TRANSACTIONS X
+                   LEFT OUTER JOIN MAM.MAM_TRANSACTION_LOT_NUMBERS XL
+                     ON XL.MTRAN_MATERIAL_TRANSACTION_ID =
+                        X.MATERIAL_TRANSACTION_ID
+                  WHERE EXISTS
+                  (SELECT NULL
+                           FROM MAM.MAM_ITEMS I
+                          WHERE I.ITEM_ID = X.ITEM_ITEM_ID_FOR
+                                AND (I.COD_ITEM = &COD_ITEM OR &COD_ITEM IS NULL)
+                                AND NVL(I.FLG_LOT_CONTROL_ITEM, 0) = 1)
+                 
+                 --
+                 ) Z
+          LEFT OUTER JOIN MAM.MAM_LOT_NUMBERS L
+            ON Z.MLOT_LOT_NUMBER_ID = L.LOT_NUMBER_ID)
+-- WHERE (&X = 0 OR CNT_ITEM_SERIAL != 2)
+ ORDER BY --
+          COD_LOT_MLOT
+         ,DAT_TRANSACTION_MTRAN

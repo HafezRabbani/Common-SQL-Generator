@@ -69,14 +69,14 @@ SELECT (SELECT O.NUM_PGV_PUROR
        --
          RX
  WHERE 1 = 1
-      --       AND RX.PUROP_PUROP_ID = &PUROP_ID
+             AND RX.PUROP_PUROP_ID = &PUROP_ID
       /*
              AND RX.ITEM_ITEM_ID =
              (SELECT ITEM_ID
                     FROM MAM.MAM_ITEMS I
                    WHERE I.COD_ITEM = TRIM('&COD_ITEM'))
       */
-       AND RX.NUM_RECEIPT_AP_MRCV IN (&NUM_RECEIPT_AP_MRCV)
+--       AND RX.NUM_RECEIPT_AP_MRCV IN (&NUM_RECEIPT_AP_MRCV)
 /*      
        AND EXISTS (SELECT NULL
           FROM PUR.PUR_ORDER_POSITIONS OP

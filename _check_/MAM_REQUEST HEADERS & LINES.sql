@@ -5,7 +5,8 @@ SELECT H.REQUEST_HEADER_ID
   FROM MAM.MAM_REQUEST_HEADERS H
  WHERE 1 = 1
       --       AND H.NUM_REQUEST_MREQH LIKE TRIM('&NUM_REQUEST_LIKE')
-      --       AND H.NUM_REQUEST_MREQH IN (&NUM_REQUEST_IN)
+   AND H.NUM_REQUEST_MREQH IN (&NUM_REQUEST_IN)
+/*
        AND EXISTS
  (SELECT NULL
           FROM --
@@ -25,8 +26,9 @@ SELECT H.REQUEST_HEADER_ID
                      )
                --
                )
-        --
-        )
+--
+ )
+*/
 --   FOR UPDATE
 --
 ;
@@ -49,19 +51,27 @@ SELECT L.REQUEST_LINE_ID
       ,L.QTY_MREQL
       ,L.MREQH_REQUEST_HEADER_ID
       ,L.DAT_END_REQUIREMENT_MREQL
-      ,TO_CHAR(L.DAT_END_REQUIREMENT_MREQL, 'YYYY/MM/DD HH24:MI:SS', 'NLS_CALENDAR=PERSIAN') AS DAT_END_REQUIREMENT_MREQL_H
+      ,TO_CHAR(L.DAT_END_REQUIREMENT_MREQL
+              ,'YYYY/MM/DD HH24:MI:SS'
+              ,'NLS_CALENDAR=PERSIAN') AS DAT_END_REQUIREMENT_MREQL_H
       ,L.ITEM_ITEM_ID
       ,L.NUM_LINE_MREQL
       ,L.LKP_STA_LINE_MREQL
-      ,APPS.APP_FND_LOOKUP_PKG.GET_FARSI_MEANING_FUN(UPPER('MAM_REQUEST_LINES'), UPPER('LKP_STA_LINE_MREQL'), L.LKP_STA_LINE_MREQL) AS LKP_STA_LINE_MREQL_DES
+      ,APPS.APP_FND_LOOKUP_PKG.GET_FARSI_MEANING_FUN(UPPER('MAM_REQUEST_LINES')
+                                                    ,UPPER('LKP_STA_LINE_MREQL')
+                                                    ,L.LKP_STA_LINE_MREQL) AS LKP_STA_LINE_MREQL_DES
       ,L.DAT_STATUS_MREQL
-      ,TO_CHAR(L.DAT_STATUS_MREQL, 'YYYY/MM/DD HH24:MI:SS', 'NLS_CALENDAR=PERSIAN') AS DAT_STATUS_MREQL_H
+      ,TO_CHAR(L.DAT_STATUS_MREQL
+              ,'YYYY/MM/DD HH24:MI:SS'
+              ,'NLS_CALENDAR=PERSIAN') AS DAT_STATUS_MREQL_H
       ,L.QTY_PRIMARY_MREQL
       ,L.CCNTR_COD_CC_CCNTR
       ,L.MSINV_NAM_SUB_INVENTORY_MSIFOR
       ,L.QTY_DELIVERED_MREQL
       ,L.DAT_START_REQUIREMENT_MREQL
-      ,TO_CHAR(L.DAT_START_REQUIREMENT_MREQL, 'YYYY/MM/DD HH24:MI:SS', 'NLS_CALENDAR=PERSIAN') AS DAT_START_REQUIREMENT_MREQL_H
+      ,TO_CHAR(L.DAT_START_REQUIREMENT_MREQL
+              ,'YYYY/MM/DD HH24:MI:SS'
+              ,'NLS_CALENDAR=PERSIAN') AS DAT_START_REQUIREMENT_MREQL_H
       ,L.NAM_UNIT_OF_MEASURE_MREQL
       ,L.NAM_UNIT_OF_MEASURE_PRIMARY_MR
       ,L.TXT_COMMENT_MREQL
@@ -77,34 +87,33 @@ SELECT L.REQUEST_LINE_ID
       --
       --AND (&LKP_STA_LINE_MREQL IS NULL OR L.LKP_STA_LINE_MREQL != &LKP_STA_LINE_MREQL)
       --       AND       (&REQUEST_LINE_ID IS NULL OR L.REQUEST_LINE_ID = &REQUEST_LINE_ID)
-      
-       AND ( --
-        &COD_ITEM IS NULL OR EXISTS
-        ( --
-             SELECT NULL
-               FROM MAM.MAM_ITEMS I
-              WHERE L.ITEM_ITEM_ID = I.ITEM_ID
-                   --       AND I.COD_ITEM = TRIM(&COD_ITEM)
-                    AND I.COD_ITEM LIKE TRIM(&COD_ITEM) || '%'
+      /*
+            
+             AND ( --
+              &COD_ITEM IS NULL OR EXISTS
+              ( --
+                   SELECT NULL
+                     FROM MAM.MAM_ITEMS I
+                    WHERE L.ITEM_ITEM_ID = I.ITEM_ID
+                         --       AND I.COD_ITEM = TRIM(&COD_ITEM)
+                          AND I.COD_ITEM LIKE TRIM(&COD_ITEM) || '%'
+                   --
+                   )
              --
              )
-       --
-       )
-
-/*
-       AND
-       ( --
+      */
+      
+   AND ( --
         EXISTS ( --
                 SELECT NULL
                   FROM MAM.MAM_REQUEST_HEADERS H
                  WHERE H.REQUEST_HEADER_ID = L.MREQH_REQUEST_HEADER_ID
-                       AND H.NUM_REQUEST_MREQH LIKE TRIM('&NUM_REQUEST_LIKE')
-                --AND H.NUM_REQUEST_MREQH IN (&NUM_REQUEST_IN)
+                      --AND H.NUM_REQUEST_MREQH LIKE TRIM('&NUM_REQUEST_LIKE')
+                   AND H.NUM_REQUEST_MREQH IN (&NUM_REQUEST_IN)
                 --
                 )
        --
        )
-*/
 --   FOR UPDATE
 --
 ;

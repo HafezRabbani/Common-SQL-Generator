@@ -28,8 +28,8 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
                       ,TC.TABLE_NAME
                       ,TC.COLUMN_NAME
                       ,CASE
-                         WHEN TC.DATA_TYPE IN ('NUMBER', 'DATE')
-                              AND CC.TABLE_NAME IS NULL THEN
+                         WHEN TC.DATA_TYPE IN ('NUMBER', 'DATE') AND
+                              CC.TABLE_NAME IS NULL THEN
                           1
                          ELSE
                           0
@@ -58,74 +58,72 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
                            FROM ALL_CONSTRAINTS C
                           INNER JOIN ALL_CONS_COLUMNS CC
                              ON C.CONSTRAINT_NAME = CC.CONSTRAINT_NAME
-                                AND C.TABLE_NAME = CC.TABLE_NAME
+                            AND C.TABLE_NAME = CC.TABLE_NAME
                           WHERE C.CONSTRAINT_TYPE = UPPER('P')
                          --
                          ) PK
           ON TC.TABLE_NAME = PK.TABLE_NAME
-             AND TC.COLUMN_NAME = PK.COLUMN_NAME
-        LEFT OUTER JOIN (SELECT DISTINCT ACC.TABLE_NAME
-                                        ,ACC.COLUMN_NAME
+         AND TC.COLUMN_NAME = PK.COLUMN_NAME
+        LEFT OUTER JOIN (SELECT DISTINCT ACC.TABLE_NAME, ACC.COLUMN_NAME
                            FROM ALL_CONSTRAINTS AC
                           INNER JOIN ALL_CONS_COLUMNS ACC
                              ON AC.CONSTRAINT_NAME = ACC.CONSTRAINT_NAME
-                                AND AC.TABLE_NAME = ACC.TABLE_NAME
+                            AND AC.TABLE_NAME = ACC.TABLE_NAME
                           WHERE AC.CONSTRAINT_TYPE = UPPER('R')) CC
           ON TC.TABLE_NAME = CC.TABLE_NAME
-             AND TC.COLUMN_NAME = CC.COLUMN_NAME
+         AND TC.COLUMN_NAME = CC.COLUMN_NAME
        WHERE UPPER(TC.TABLE_NAME) = UPPER(GV_TABLENAME)
-             AND TC.COLUMN_NAME NOT IN ( --
-                                        'CREATE_DATE'
-                                       ,'CREATE_BY_DB_USER'
-                                       ,'CREATE_BY_APP_USER'
-                                       ,'LAST_UPDATE_DATE'
-                                       ,'LAST_UPDATE_BY_DB_USER'
-                                       ,'LAST_UPDATE_BY_APP_USER'
-                                       ,'ATTACH_ID'
-                                       ,'LAST_CHANGE_TS'
-                                       ,'MODULE_NAME'
-                                       ,'OS_USERNAME'
-                                        --
-                                       ,'LKP_COD_TRANSACTION_ACTION_MTR'
-                                       ,'MSTP_SOURCE_TYPE_ID'
-                                       ,'AMN_ACTUAL_MTRAN'
-                                       ,'COD_COSTED_MTRAN'
-                                       ,'ORPYD_ORPYM_NUM_ORD_PYM_ORPYM'
-                                       ,'ORPYD_NUM_SEQ_ORPYD'
-                                       ,'SPINV_NUM_SRL_SPINV'
-                                       ,'DAT_STL_INVOICE_MTRAN'
-                                       ,'COD_REVISION_MTRAN'
-                                       ,'FLG_WAC_OPN_MTRAN'
-                                       ,'NUM_WAC_ACC_MAIN_MTRAN'
-                                       ,'NUM_WAC_ACC_CONT_MTRAN'
-                                       ,'DAT_WAC_MTRAN'
-                                       ,'AMN_STIMATE_MTRAN'
-                                       ,'LKP_COD_FCT_MTRAN'
-                                       ,'MRES_RESERVATION_ID'
-                                       ,'LKP_STA_PENDING_MTRAN'
-                                       ,'FLG_HAVE_BEFOR_INP_COST_MTRAN'
-                                       ,'FLG_SLC_MTRAN'
-                                       --,'LKP_COD_SYSTEM_MTRAN'
-                                       ,'CCNTR_COD_CC_CCNTR_FROM'
-                                       ,'SPINV_NUM_SRL_INNER_WAY'
-                                       ,'LKP_TYP_MTYPE_MTRAN'
-                                       ,'CCNTR_COD_CC_CCNTR_FROM'
-                                       ,'QTY_ONHAND_PREVIOUS_MTRAN'
-                                       ,'COD_REVISION_FOR_MTRAN'
-                                       ,'NAM_UNIT_OF_MEASURE_PRIMARY_MT'
-                                       ,'ID_TRANSFER_LOCATOR_MTRAN'
-                                        --,'MSINV_NAM_SUB_INVENTORY_MSINV'
-                                        --,'MSLOC_SUB_INVENTORY_LOCATOR_ID'
-                                       ,'NAM_TRANSFER_SUBINVNTRY_MTRA'
-                                        --,''
-                                        )
+         AND TC.COLUMN_NAME NOT IN ( --
+                                    'CREATE_DATE'
+                                   ,'CREATE_BY_DB_USER'
+                                   ,'CREATE_BY_APP_USER'
+                                   ,'LAST_UPDATE_DATE'
+                                   ,'LAST_UPDATE_BY_DB_USER'
+                                   ,'LAST_UPDATE_BY_APP_USER'
+                                   ,'ATTACH_ID'
+                                   ,'LAST_CHANGE_TS'
+                                   ,'MODULE_NAME'
+                                   ,'OS_USERNAME'
+                                    --
+                                   ,'LKP_COD_TRANSACTION_ACTION_MTR'
+                                   ,'MSTP_SOURCE_TYPE_ID'
+                                   ,'AMN_ACTUAL_MTRAN'
+                                   ,'COD_COSTED_MTRAN'
+                                   ,'ORPYD_ORPYM_NUM_ORD_PYM_ORPYM'
+                                   ,'ORPYD_NUM_SEQ_ORPYD'
+                                   ,'SPINV_NUM_SRL_SPINV'
+                                   ,'DAT_STL_INVOICE_MTRAN'
+                                   ,'COD_REVISION_MTRAN'
+                                   ,'FLG_WAC_OPN_MTRAN'
+                                   ,'NUM_WAC_ACC_MAIN_MTRAN'
+                                   ,'NUM_WAC_ACC_CONT_MTRAN'
+                                   ,'DAT_WAC_MTRAN'
+                                   ,'AMN_STIMATE_MTRAN'
+                                   ,'LKP_COD_FCT_MTRAN'
+                                   ,'MRES_RESERVATION_ID'
+                                   ,'LKP_STA_PENDING_MTRAN'
+                                   ,'FLG_HAVE_BEFOR_INP_COST_MTRAN'
+                                   ,'FLG_SLC_MTRAN'
+                                    --,'LKP_COD_SYSTEM_MTRAN'
+                                   ,'CCNTR_COD_CC_CCNTR_FROM'
+                                   ,'SPINV_NUM_SRL_INNER_WAY'
+                                   ,'LKP_TYP_MTYPE_MTRAN'
+                                   ,'CCNTR_COD_CC_CCNTR_FROM'
+                                   ,'QTY_ONHAND_PREVIOUS_MTRAN'
+                                   ,'COD_REVISION_FOR_MTRAN'
+                                   ,'NAM_UNIT_OF_MEASURE_PRIMARY_MT'
+                                   ,'ID_TRANSFER_LOCATOR_MTRAN'
+                                    --,'MSINV_NAM_SUB_INVENTORY_MSINV'
+                                    --,'MSLOC_SUB_INVENTORY_LOCATOR_ID'
+                                   ,'NAM_TRANSFER_SUBINVNTRY_MTRA'
+                                    --,''
+                                    )
       --
       )
     SELECT *
       FROM CURSOR_TABLE T
      WHERE (P_IS_PK IS NULL OR T.IS_PK = NVL(P_IS_PK, 0))
-     ORDER BY T.IS_PK DESC
-             ,T.COLUMN_ID;
+     ORDER BY T.IS_PK DESC, T.COLUMN_ID;
 
   FUNCTION MAM_REMOVE_LAST_VOWEL_FUN(P_INPUT VARCHAR2) RETURN CLOB /*VARCHAR2*/
    IS
@@ -1471,8 +1469,8 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
     LV_RESULT := LV_RESULT || 'EXCEPTION' || CHR(10) ||
                  ' WHEN OTHERS THEN ' || CHR(10) ||
                  'LV_RESULT := ''{—òÊ—œÌ œ— ' || TABLE_COMMENT_FUN ||
-                 ' œ—Ã ‰‘œ: ''||sqlerrm||''}'';' || CHR(10) || 'END;' || CHR(10) ||
-                 'END IF;';
+                 ' œ—Ã ‰‘œ: ''||sqlerrm||''}'';' || CHR(10) || 'END;' ||
+                 CHR(10) || 'END IF;';
     LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
                  'end;';
     RETURN UPPER(TRIM(LV_RESULT));
@@ -1553,7 +1551,8 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
     LV_RESULT := LV_RESULT || CHR(10) || ';' || CHR(10) || 'EXCEPTION' ||
                  CHR(10) || ' WHEN OTHERS THEN ' || CHR(10) ||
                  'LV_RESULT := ''{»Â œ·Ì· «” ›«œÂ «“ —òÊ—œ œ— œÌê— Ãœ«Ê·° Õ–› ¬‰ «“ ' ||
-                 TABLE_COMMENT_FUN || ' «„ò«‰Å–Ì— ‰Ì” : ''||sqlerrm||''}'';' || CHR(10) ||
+                 TABLE_COMMENT_FUN ||
+                 ' «„ò«‰Å–Ì— ‰Ì” : ''||sqlerrm||''}'';' || CHR(10) ||
                  'END; end if;';
     LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
                  'end;';
@@ -1760,9 +1759,15 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
     END LOOP;
     --where clause>
     LV_RESULT := LV_RESULT || CHR(10) || '--' || CHR(10) ||
-                 '||CHR(10)||CHR(47)||CHR(42)||C_DATE||CHR(42)||CHR(47);' ||
-                 CHR(10) || 'APP_MAM_GLOBAL_TEMPS_PKG.EXEC_IMDT(LV_SQL);' ||
-                 CHR(10) || 'END;';
+                 '||CHR(10)||CHR(47)||CHR(42)||C_DATE||CHR(42)||CHR(47);';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'APP_MAM_GLOBAL_TEMPS_PKG.EXEC_IMDT(LV_SQL);';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'LV_SQL := ''COMMENT ON  TABLE ''|| P_FILTER_VIEW_NAME ||'' IS ' ||
+                 CHR(39) || CHR(39) || '›Ì· — ' || TABLE_COMMENT_FUN ||
+                 CHR(39) || CHR(39) || CHR(39) || ';' || CHR(10) ||
+                 'APP_MAM_GLOBAL_TEMPS_PKG.EXEC_IMDT(LV_SQL);';
+    LV_RESULT := LV_RESULT || CHR(10) || 'END;';
     RETURN UPPER(TRIM(LV_RESULT));
   END;
 
@@ -2156,8 +2161,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
     ELSE
       GV_TABLENAME := TABLE_NAME;
     END IF;
-    IF LV_RESULT IS NULL
-       AND NVL(CREATE_CTRL_PACKAGE, 1) = 1
+    IF LV_RESULT IS NULL AND NVL(CREATE_CTRL_PACKAGE, 1) = 1
     THEN
       BEGIN
         LV_CTRL_PACKAGE_NAME := UPPER(TRIM(CREATE_CTRL_PACKAGE_NAME( --
@@ -2228,8 +2232,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
     END IF;
     LV_SQL_SPEC := NULL;
     LV_SQL_BODY := NULL;
-    IF LV_RESULT IS NULL
-       AND NVL(CREATE_APP_PACKAGE, 1) = 1
+    IF LV_RESULT IS NULL AND NVL(CREATE_APP_PACKAGE, 1) = 1
     THEN
       BEGIN
         LV_APP_PACKAGE_NAME := UPPER(TRIM(CREATE_APP_PACKAGE_NAME( --

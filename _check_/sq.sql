@@ -20,7 +20,7 @@ SELECT CASE
                         AND II.MSINV_NAM_SUB_INVENTORY_MSINV = INVL.INV
                         AND NVL(II.MSLOC_SUB_INVENTORY_LOCATOR_ID, 0) =
                         NVL(INVL.LID, 0)) AS FLG_PRIMARY_SUBINVENTORY_MIINV
-               ,CAST(NVL(SQ.SQ, 0) AS NUMBER(15, 3)) AS SQ
+               ,CAST(NVL(SQ.SQ, 0) AS NUMBER(15, 5)) AS SQ
                ,OH.ONHAND_QUANTITY_ID
                ,OH.QTY_MONH
                ,I.DES_ITEM

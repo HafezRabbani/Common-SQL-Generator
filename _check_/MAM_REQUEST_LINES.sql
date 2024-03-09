@@ -22,16 +22,16 @@ SELECT ( --
       ,L.REQUEST_LINE_ID
       ,L.QTY_MREQL
       ,L.MREQH_REQUEST_HEADER_ID
+      ,L.LKP_STA_LINE_MREQL
+      ,APPS.APP_FND_LOOKUP_PKG.GET_FARSI_MEANING_FUN(UPPER('MAM_REQUEST_LINES')
+                                                    ,UPPER('LKP_STA_LINE_MREQL')
+                                                    ,L.LKP_STA_LINE_MREQL) AS LKP_STA_LINE_MREQL_DES
       ,L.DAT_END_REQUIREMENT_MREQL
       ,TO_CHAR(L.DAT_END_REQUIREMENT_MREQL
               ,'YYYY/MM/DD HH24:MI:SS'
               ,'NLS_CALENDAR=PERSIAN') AS DAT_END_REQUIREMENT_MREQL_H
       ,L.ITEM_ITEM_ID
       ,L.NUM_LINE_MREQL
-      ,L.LKP_STA_LINE_MREQL
-      ,APPS.APP_FND_LOOKUP_PKG.GET_FARSI_MEANING_FUN(UPPER('MAM_REQUEST_LINES')
-                                                    ,UPPER('LKP_STA_LINE_MREQL')
-                                                    ,L.LKP_STA_LINE_MREQL) AS LKP_STA_LINE_MREQL_DES
       ,L.DAT_STATUS_MREQL
       ,TO_CHAR(L.DAT_STATUS_MREQL
               ,'YYYY/MM/DD HH24:MI:SS'

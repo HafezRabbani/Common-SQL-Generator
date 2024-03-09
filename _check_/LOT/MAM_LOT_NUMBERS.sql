@@ -20,7 +20,7 @@ SELECT L.LOT_NUMBER_ID
   FROM MAM.MAM_LOT_NUMBERS L
  WHERE 1 = 1
       -- and l.lot_number_id=&lot_number_id
-      
+   AND L.COD_LOT_MLOT = &COD_LOT_MLOT
    AND L.ITEM_ITEM_ID IN ( --
                           SELECT ITEM_ID
                             FROM MAM.MAM_ITEMS I
@@ -49,15 +49,16 @@ SELECT L.LOT_NUMBER_ID
   LEFT OUTER JOIN MAM.MAM_LOT_NUMBERS L
     ON L.LOT_NUMBER_ID = XL.MLOT_LOT_NUMBER_ID
  WHERE 1 = 1
-   AND L.LOT_NUMBER_ID = &LOT_NUMBER_ID
-/*
-AND L.ITEM_ITEM_ID IN ( --
-SELECT ITEM_ID
-FROM MAM.MAM_ITEMS I
-WHERE I.COD_ITEM = TRIM(&COD_ITEM)
---
-) 
-*/
+      --   AND L.LOT_NUMBER_ID = &LOT_NUMBER_ID
+   AND L.COD_LOT_MLOT = &COD_LOT_MLOT
+      
+   AND L.ITEM_ITEM_ID IN ( --
+                          SELECT ITEM_ID
+                            FROM MAM.MAM_ITEMS I
+                           WHERE I.COD_ITEM = TRIM(&COD_ITEM)
+                          --
+                          )
+
  ORDER BY X.MATERIAL_TRANSACTION_ID DESC
 --
 ;

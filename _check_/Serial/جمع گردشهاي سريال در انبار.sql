@@ -224,6 +224,14 @@ SELECT *
                   WHERE I.ITEM_ID = Z.ITEM_ITEM_ID_FOR) AS ITEM
                ,Z.ITEM_ITEM_ID_FOR AS ITEM_ID
                ,S.SERIAL_NUMBER_ID
+               ,CASE
+                  WHEN Z.ITEM_ITEM_ID_FOR !=
+                       NVL((SELECT ITEM_ITEM_ID
+                             FROM MAM.MAM_SERIAL_NUMBERS S98
+                            WHERE S98.SERIAL_NUMBER_ID = S.SERIAL_NUMBER_ID)
+                          ,0) THEN
+                   'Incompatible Item'
+                END INCMPTBL
                ,(SELECT 'FIA_FIXED_ASSETS'
                    FROM DUAL
                   WHERE EXISTS
@@ -280,21 +288,23 @@ SELECT *
                    LEFT OUTER JOIN MAM.MAM_TRANSACTION_SERIAL_NUMBERS XS
                      ON XS.MTRAN_MATERIAL_TRANSACTION_ID =
                         X.MATERIAL_TRANSACTION_ID
-                  WHERE
-                 /*X.DAT_TRANSACTION_MTRAN >=
-                 TO_DATE('1400/01/01', 'YYYY/MM/DD', 'NLS_CALENDAR=PERSIAN')
-                 AND*/
-                  EXISTS
-                  (SELECT NULL
-                     FROM MAM.MAM_ITEMS I
-                    WHERE I.ITEM_ID = X.ITEM_ITEM_ID_FOR
-                      AND (I.COD_ITEM =
-                          (SELECT REPLACE(C, CHR(10), '')
-                              FROM (SELECT UPPER(TRIM('&cod_item')) AS C FROM DUAL)) OR
-                          (SELECT REPLACE(C, CHR(10), '')
-                              FROM (SELECT UPPER(TRIM('&cod_item')) AS C FROM DUAL)) IS NULL)
-                   --AND NVL(I.COD_SERIAL_NUMBER_CONTROL_ITEM, 0) = 1
-                   )
+                  WHERE 1 = 1
+                       /*AND X.DAT_TRANSACTION_MTRAN >=
+                       TO_DATE('1400/01/01', 'YYYY/MM/DD', 'NLS_CALENDAR=PERSIAN')
+                       */
+                    --AND X.MSINV_NAM_SUB_INVENTORY_MSIFOR = &NAM_SUB_INVENTORY
+                    AND EXISTS (SELECT NULL
+                           FROM MAM.MAM_ITEMS I
+                          WHERE I.ITEM_ID = X.ITEM_ITEM_ID_FOR
+                            AND (I.COD_ITEM =
+                                (SELECT REPLACE(C, CHR(10), '')
+                                    FROM (SELECT UPPER(TRIM('&cod_item')) AS C
+                                            FROM DUAL)) OR
+                                (SELECT REPLACE(C, CHR(10), '')
+                                    FROM (SELECT UPPER(TRIM('&cod_item')) AS C
+                                            FROM DUAL)) IS NULL)
+                         --AND NVL(I.COD_SERIAL_NUMBER_CONTROL_ITEM, 0) = 1
+                         )
                  
                  --
                  ) Z

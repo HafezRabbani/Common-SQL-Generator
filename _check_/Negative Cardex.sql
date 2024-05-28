@@ -1,0 +1,96 @@
+SELECT ( --
+        SELECT COD_ITEM
+          FROM MAM.MAM_ITEMS I
+         WHERE I.ITEM_ID = Y.ITEM_ITEM_ID_FOR
+        --
+        ) AS ITEM
+      ,(SELECT RX.NUM_RECEIPT_AP_MRCV
+          FROM MAM.MAM_RCV_TRANSACTIONS RX
+         WHERE RX.MTRAN_MATERIAL_TRANSACTION_ID = Y.XID) AS NUM_RECEIPT
+      ,(SELECT RX.RCV_TRANSACTION_ID
+          FROM MAM.MAM_RCV_TRANSACTIONS RX
+         WHERE RX.MTRAN_MATERIAL_TRANSACTION_ID = Y.XID) AS RXID
+      ,Y.*
+  FROM ( --
+        
+        SELECT X.MATERIAL_TRANSACTION_ID AS XID
+               ,X.DAT_TRANSACTION_MTRAN
+               ,TO_CHAR(X.DAT_TRANSACTION_MTRAN
+                       ,'YYYY/MM/DD HH24:MI:SS'
+                       ,'NLS_CALENDAR=PERSIAN') AS D
+               ,X.MTYP_TRANSACTION_TYPE_ID AS TT
+               ,CASE
+                  WHEN X.QTY_PRIMARY_MTRAN > 0 THEN
+                   '+'
+                END AS FLG
+               ,SUM(X.QTY_PRIMARY_MTRAN) OVER(PARTITION BY X.ITEM_ITEM_ID_FOR, X.MSINV_NAM_SUB_INVENTORY_MSIFOR, X.MSLOC_SUB_INVENTORY_LOCATORFOR ORDER BY X.DAT_TRANSACTION_MTRAN, X.MATERIAL_TRANSACTION_ID, X.MSLOC_SUB_INVENTORY_LOCATORFOR) AS SQ
+               ,CASE
+                  WHEN SUM(X.QTY_PRIMARY_MTRAN)
+                   OVER(PARTITION BY X.ITEM_ITEM_ID_FOR
+                           ,X.MSINV_NAM_SUB_INVENTORY_MSIFOR ORDER BY
+                            X.DAT_TRANSACTION_MTRAN
+                           ,X.MATERIAL_TRANSACTION_ID) < 0 THEN
+                   '-'
+                END AS NEG_
+               ,X.QTY_PRIMARY_MTRAN
+               ,X.MSINV_NAM_SUB_INVENTORY_MSIFOR AS INV
+               ,X.MSLOC_SUB_INVENTORY_LOCATORFOR
+               ,X.MSLOC_SUB_INVENTORY_LOCATORFOR || CASE
+                  WHEN X.MSLOC_SUB_INVENTORY_LOCATORFOR IS NOT NULL THEN
+                   (SELECT ': ' || LL.COD_LOCATOR_MSLOC
+                      FROM MAM.MAM_SUB_INVENTORY_LOCATORS LL
+                     WHERE LL.SUB_INVENTORY_LOCATOR_ID =
+                           X.MSLOC_SUB_INVENTORY_LOCATORFOR)
+                END AS LID
+               ,(SELECT I.ITEM_ID || ': ' || I.COD_ITEM || ': ' || I.DES_ITEM
+                   FROM MAM.MAM_ITEMS I
+                  WHERE I.ITEM_ID = X.ITEM_ITEM_ID_FOR) I
+               ,X.AMN_ACTUAL_MTRAN
+               ,X.CREATE_BY_APP_USER ||
+                (SELECT ': ' || U.NAM_USER_USRS
+                   FROM FND.FND_USERS U
+                  WHERE U.IDE_USER_USRS = X.CREATE_BY_APP_USER) AS USER_
+               ,X.NAM_TRANSACTION_SOURCE_MTRAN
+               ,X.MODULE_NAME
+               ,X.OS_USERNAME
+               ,X.ITEM_ITEM_ID_FOR
+               ,SUM(X.QTY_TRANSACTION_MTRAN) OVER(PARTITION BY X.ITEM_ITEM_ID_FOR, X.MSINV_NAM_SUB_INVENTORY_MSIFOR ORDER BY X.DAT_TRANSACTION_MTRAN, X.MATERIAL_TRANSACTION_ID) AS SQN
+               ,X.QTY_TRANSACTION_MTRAN
+          FROM MAM.MAM_MATERIAL_TRANSACTIONS X
+         WHERE 1 = 1
+/*
+               AND X.ITEM_ITEM_ID_FOR --
+              --               = &ITEM_ITEM_ID_FOR
+              
+               IN ( --
+                       SELECT ITEM_ID
+                         FROM MAM.MAM_ITEMS I
+                        WHERE I.COD_ITEM = TRIM(&COD_ITEM)
+                       --
+                       )
+               AND (X.MSINV_NAM_SUB_INVENTORY_MSIFOR = &NAM_SUB_INVENTORY OR
+               &NAM_SUB_INVENTORY IS NULL)
+               AND
+               (X.MSLOC_SUB_INVENTORY_LOCATORFOR = &SUB_INVENTORY_LOCATOR_ID OR
+               &SUB_INVENTORY_LOCATOR_ID IS NULL)
+*/        --
+        ) Y
+--
+ WHERE --
+ 1 = 1
+ AND SQ < 0
+--AND SQ = 0
+-- AND TT IN (&TT)
+/*
+ AND
+ (&DAT_TRANSACTION_MTRAN IS NULL OR
+ DAT_TRANSACTION_MTRAN >=
+ TO_DATE('&DAT_TRANSACTION_MTRAN', 'YYYY/MM/DD', 'NLS_CALENDAR=PERSIAN'))
+ */
+-- AND TT IN (25, 26)
+-- AND MSLOC_SUB_INVENTORY_LOCATORFOR = &MSLOC_SUB_INVENTORY_LOCATORFOR
+-- AND TT = 52 AND QTY_PRIMARY_MTRAN < 0
+-- AND TT = 54 AND QTY_PRIMARY_MTRAN > 0
+-- AND TT = 91 AND QTY_PRIMARY_MTRAN > 0
+ ORDER BY Y.ITEM_ITEM_ID_FOR,DAT_TRANSACTION_MTRAN DESC
+         ,Y.XID                 DESC;

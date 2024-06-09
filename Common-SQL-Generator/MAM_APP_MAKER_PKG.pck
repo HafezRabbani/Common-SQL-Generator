@@ -1036,14 +1036,66 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
     RETURN UPPER(TRIM(LV_RESULT));
   END;
 
-  FUNCTION CREATE_CHECK_DATA_DECLARATION RETURN CLOB /*VARCHAR2*/
+  /*
+    FUNCTION CREATE_CHECK_DATA_DECLARATION RETURN CLOB 
+     IS
+      LV_RESULT  CLOB; --VARCHAR2(32672);
+      DELIMITTER VARCHAR2(10);
+      I          NUMBER;
+    BEGIN
+      LV_RESULT  := LV_RESULT || '-- CHECK_DATA' || CV_BEAUTY_DASH || CHR(10);
+      LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_DATA(--' || CHR(10);
+      DELIMITTER := '';
+      I          := 1;
+      FOR C IN TABLE_COLUMNS(NULL)
+      LOOP
+        LV_RESULT  := LV_RESULT || DELIMITTER ||
+                      CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                      CREATE_PARAMETER_TYPE(C.COLUMN_NAME) || '--' ||
+                      TO_CHAR(I) || '--' || CHR(10);
+        DELIMITTER := ', ';
+        I          := I + 1;
+      END LOOP;
+      LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+      RETURN UPPER(TRIM(LV_RESULT));
+    END;
+  
+    FUNCTION CREATE_CHECK_DATA_BODY RETURN CLOB 
+     IS
+      LV_RESULT  CLOB; --VARCHAR2(32672);
+      DELIMITTER VARCHAR2(10);
+    BEGIN
+      LV_RESULT  := LV_RESULT || CREATE_CHECK_DATA_DECLARATION || ' is ' ||
+                    CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' || CHR(10) ||
+                    'begin';
+      LV_RESULT  := LV_RESULT || CHR(10) ||
+                    'if LV_RESULT is null then LV_RESULT:=CHECK_LOCK(--' ||
+                    CHR(10);
+      DELIMITTER := NULL;
+      FOR C IN TABLE_COLUMNS(C_IS_PK)
+      LOOP
+        IF (C.IS_PK = 1)
+        THEN
+          LV_RESULT  := LV_RESULT || DELIMITTER ||
+                        CREATE_PARAMETER_NAME(C.COLUMN_NAME);
+          DELIMITTER := ', ';
+        END IF;
+      END LOOP;
+      LV_RESULT := LV_RESULT || CHR(10) || '--' || CHR(10) || '); end if;';
+      LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                   'end;';
+      RETURN UPPER(TRIM(LV_RESULT));
+    END;
+  */
+  FUNCTION CREATE_CHECK_B4_ADD_DECLARATN RETURN CLOB /*VARCHAR2*/
    IS
     LV_RESULT  CLOB; --VARCHAR2(32672);
     DELIMITTER VARCHAR2(10);
     I          NUMBER;
   BEGIN
-    LV_RESULT  := LV_RESULT || '-- CHECK_DATA' || CV_BEAUTY_DASH || CHR(10);
-    LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_DATA(--' || CHR(10);
+    LV_RESULT  := LV_RESULT || '-- CHECK_B4_ADD' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_B4_ADD(--' || CHR(10);
     DELIMITTER := '';
     I          := 1;
     FOR C IN TABLE_COLUMNS(NULL)
@@ -1059,12 +1111,114 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
     RETURN UPPER(TRIM(LV_RESULT));
   END;
 
-  FUNCTION CREATE_CHECK_DATA_BODY RETURN CLOB /*VARCHAR2*/
+  FUNCTION CREATE_CHECK_B4_ADD_BODY RETURN CLOB /*VARCHAR2*/
    IS
     LV_RESULT  CLOB; --VARCHAR2(32672);
     DELIMITTER VARCHAR2(10);
   BEGIN
-    LV_RESULT  := LV_RESULT || CREATE_CHECK_DATA_DECLARATION || ' is ' ||
+    LV_RESULT  := LV_RESULT || CREATE_CHECK_B4_ADD_DECLARATN || ' is ' ||
+                  CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' || CHR(10) ||
+                  'begin';
+    LV_RESULT  := LV_RESULT || CHR(10) ||
+                  'if LV_RESULT is null then LV_RESULT:=CHECK_LOCK(--' ||
+                  CHR(10);
+    DELIMITTER := NULL;
+    FOR C IN TABLE_COLUMNS(C_IS_PK)
+    LOOP
+      IF (C.IS_PK = 1)
+      THEN
+        LV_RESULT  := LV_RESULT || DELIMITTER ||
+                      CREATE_PARAMETER_NAME(C.COLUMN_NAME);
+        DELIMITTER := ', ';
+      END IF;
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || '--' || CHR(10) || '); end if;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_EDIT_DECLARATN RETURN CLOB /*VARCHAR2*/
+   IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- CHECK_B4_EDIT' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_B4_EDIT(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_EDIT_BODY RETURN CLOB /*VARCHAR2*/
+   IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+  BEGIN
+    LV_RESULT  := LV_RESULT || CREATE_CHECK_B4_EDIT_DECLARATN || ' is ' ||
+                  CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' || CHR(10) ||
+                  'begin';
+    LV_RESULT  := LV_RESULT || CHR(10) ||
+                  'if LV_RESULT is null then LV_RESULT:=CHECK_LOCK(--' ||
+                  CHR(10);
+    DELIMITTER := NULL;
+    FOR C IN TABLE_COLUMNS(C_IS_PK)
+    LOOP
+      IF (C.IS_PK = 1)
+      THEN
+        LV_RESULT  := LV_RESULT || DELIMITTER ||
+                      CREATE_PARAMETER_NAME(C.COLUMN_NAME);
+        DELIMITTER := ', ';
+      END IF;
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || '--' || CHR(10) || '); end if;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_REMOVE_DCLR RETURN CLOB /*VARCHAR2*/
+   IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- CHECK_B4_REMOVE' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_B4_REMOVE(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(C_IS_PK)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_REMOVE_BODY RETURN CLOB /*VARCHAR2*/
+   IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+  BEGIN
+    LV_RESULT  := LV_RESULT || CREATE_CHECK_B4_REMOVE_DCLR || ' is ' ||
                   CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' || CHR(10) ||
                   'begin';
     LV_RESULT  := LV_RESULT || CHR(10) ||
@@ -1405,7 +1559,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
   
     LV_RESULT := LV_RESULT || CHR(10) || 'LV_RESULT:=';
     LV_RESULT := LV_RESULT || CREATE_CTRL_PACKAGE_NAME(GV_TABLENAME) ||
-                 '.CHECK_DATA(--';
+                 '.CHECK_B4_ADD(--';
     -- <parameters to check
     DELIMITTER := '';
     I          := 1;
@@ -1513,7 +1667,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
                  'begin';
     LV_RESULT := LV_RESULT || CHR(10) ||
                  ' if lv_result is null then lv_result := ' ||
-                 CREATE_CTRL_PACKAGE_NAME(GV_TABLENAME) || '.check_lock(';
+                 CREATE_CTRL_PACKAGE_NAME(GV_TABLENAME) || '.check_b4_remove(';
     -- <CHECK_LOCK parameters
     DELIMITTER := '';
     I          := 1;
@@ -1619,6 +1773,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
     --parameters to initiator>
     LV_RESULT := LV_RESULT || CHR(10) || ');';
   
+/*
     LV_RESULT := LV_RESULT || 'if lv_result is null then lv_result:=' ||
                  CREATE_CTRL_PACKAGE_NAME(GV_TABLENAME) || '.CHECK_LOCK(--';
     -- <parameters to initiator
@@ -1632,6 +1787,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
     END LOOP;
     --parameters to initiator>
     LV_RESULT := LV_RESULT || CHR(10) || ');end if;';
+*/
   
     LV_RESULT := LV_RESULT || 'if lv_result is null then lv_result:=' ||
                  CREATE_CTRL_PACKAGE_NAME(GV_TABLENAME) || '.retriever(--';
@@ -1666,7 +1822,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
   
     LV_RESULT := LV_RESULT || CHR(10) ||
                  'end if; if lv_result is null then LV_RESULT:=' ||
-                 CREATE_CTRL_PACKAGE_NAME(GV_TABLENAME) || '.CHECK_DATA(';
+                 CREATE_CTRL_PACKAGE_NAME(GV_TABLENAME) || '.CHECK_B4_EDIT(';
     -- <parameters to check
     DELIMITTER := '';
     I          := 1;
@@ -2203,15 +2359,20 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
                        CREATE_INITIATOR_DECLARATION || ';';
         LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
                        CREATE_RETRIEVER_DECLARATION || ';';
-        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
-                       CREATE_CHECK_DATA_DECLARATION || ';';
+--        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || CREATE_CHECK_DATA_DECLARATION || ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || CREATE_CHECK_B4_ADD_DECLARATN|| ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || CREATE_CHECK_B4_EDIT_DECLARATN|| ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || CREATE_CHECK_B4_REMOVE_DCLR|| ';';
       
         LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
                        CREATE_GET_DESCRIPTION_BODY;
         LV_SQL_BODY := LV_SQL_BODY || CHR(10) || CREATE_CHECK_LOCK_BODY;
         LV_SQL_BODY := LV_SQL_BODY || CHR(10) || CREATE_INITIATOR_BODY;
         LV_SQL_BODY := LV_SQL_BODY || CHR(10) || CREATE_RETRIEVER_BODY;
-        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || CREATE_CHECK_DATA_BODY;
+        --LV_SQL_BODY := LV_SQL_BODY || CHR(10) || CREATE_CHECK_DATA_BODY;
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || CREATE_CHECK_B4_ADD_BODY;
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || CREATE_CHECK_B4_EDIT_BODY;
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || CREATE_CHECK_B4_REMOVE_BODY;
         LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || UPPER('end;');
         LV_SQL_BODY := LV_SQL_BODY || CHR(10) || UPPER('end;');
         BEGIN

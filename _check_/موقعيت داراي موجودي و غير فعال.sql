@@ -1,0 +1,31 @@
+SELECT APPS.MAM_ITEMS_CTRL_PKG.GET_DESCRIPTION(ITEM_ITEM_ID_FOR) AS ITEM
+      ,APPS.MAM_SUB_INVENTRYLCTRS_CTRL_PKG.GET_DESCRIPTION(MSLOC_SUB_INVENTORY_LOCATORFOR) AS LOC
+      ,Z.*
+  FROM ( --
+        SELECT *
+          FROM ( --
+                 SELECT X.ITEM_ITEM_ID_FOR
+                        ,X.MSINV_NAM_SUB_INVENTORY_MSIFOR
+                        ,X.MSLOC_SUB_INVENTORY_LOCATORFOR
+                        ,SUM(X.QTY_PRIMARY_MTRAN) AS SQ
+                   FROM MAM.MAM_MATERIAL_TRANSACTIONS X
+                  GROUP BY X.ITEM_ITEM_ID_FOR
+                           ,X.MSINV_NAM_SUB_INVENTORY_MSIFOR
+                           ,X.MSLOC_SUB_INVENTORY_LOCATORFOR
+                 HAVING SUM(X.QTY_PRIMARY_MTRAN) != 0
+                 --
+                 ) SQ
+          FULL OUTER JOIN (SELECT ISI.ITEM_ITEM_ID
+                                 ,ISI.MSINV_NAM_SUB_INVENTORY_MSINV
+                                 ,ISI.MSLOC_SUB_INVENTORY_LOCATOR_ID
+                             FROM MAM.MAM_ITEM_SUB_INVENTORIES ISI
+                            WHERE NVL(ISI.FLG_PRIMARY_SUBINVENTORY_MIINV, 0) = 0) T
+            ON SQ.ITEM_ITEM_ID_FOR = T.ITEM_ITEM_ID
+           AND SQ.MSINV_NAM_SUB_INVENTORY_MSIFOR =
+               T.MSINV_NAM_SUB_INVENTORY_MSINV
+           AND NVL(SQ.MSLOC_SUB_INVENTORY_LOCATORFOR, 0) =
+               NVL(T.MSLOC_SUB_INVENTORY_LOCATOR_ID, 0)
+        --
+        ) Z
+ WHERE ITEM_ITEM_ID IS NOT NULL
+   AND ITEM_ITEM_ID_FOR IS NOT NULL

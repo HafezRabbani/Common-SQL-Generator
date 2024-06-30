@@ -1253,7 +1253,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
     FOR C IN TABLE_COLUMNS(NULL)
     LOOP
       LV_RESULT  := LV_RESULT || DELIMITTER ||
-                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' IN OUT ' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' IN OUT NOCOPY ' ||
                     CREATE_PARAMETER_TYPE(C.COLUMN_NAME) || '--' ||
                     TO_CHAR(I) || '--' || CHR(10);
       DELIMITTER := ', ';

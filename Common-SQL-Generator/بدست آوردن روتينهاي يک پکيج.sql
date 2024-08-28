@@ -1,24 +1,25 @@
 BEGIN
-  FOR C IN (SELECT F
-                  ,'''' || F || '''' AS F2
+  FOR C IN (SELECT F, '''' || F || '''' AS F2
               FROM ( --
                     SELECT TRIM(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(S.TEXT
-                                                                ,'FUNCTION'
+                                                                        ,'FUNCTION'
+                                                                        ,'')
+                                                                ,'RETURN'
                                                                 ,'')
-                                                        ,'RETURN'
+                                                        ,'VARCHAR2'
                                                         ,'')
-                                                ,'VARCHAR2'
+                                                ,'NUMBER;'
                                                 ,'')
-                                        ,'NUMBER;'
-                                        ,''),chr(10),'')) AS F
+                                        ,CHR(10)
+                                        ,'')) AS F
                       FROM ALL_SOURCE S
-                     WHERE S.NAME = 'MAM_ERRORS_PKG'
-                           AND S.TYPE = 'PACKAGE'
-                           AND TEXT LIKE '%FUNCTION%')
+                     WHERE S.NAME = UPPER(TRIM('&pkg'))
+                       AND S.TYPE = 'PACKAGE'
+                       AND TEXT LIKE '%FUNCTION%')
             --
             )
   LOOP
-    DBMS_OUTPUT.PUT_LINE('SELECT APPS.MAM_ERRORS_PKG.' || C.F ||
+    DBMS_OUTPUT.PUT_LINE('SELECT APPS.' || UPPER(TRIM('&pkg')) || '.' || C.F ||
                          ' AS F_VALUE,' || C.F2 || ' AS F FROM DUAL');
     DBMS_OUTPUT.PUT_LINE(' UNION');
   END LOOP;

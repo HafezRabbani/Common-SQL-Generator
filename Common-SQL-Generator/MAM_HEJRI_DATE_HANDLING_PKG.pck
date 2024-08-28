@@ -1,14 +1,36 @@
-CREATE OR REPLACE PACKAGE MAM_HEJRI_DATE_HANDLING_PKG IS
+CREATE OR REPLACE PACKAGE "MAM_HEJRI_DATE_HANDLING_PKG" IS
   --
   -- GET_FIRST_OF_HEJRI_MONTH
   FUNCTION GET_FIRST_OF_HEJRI_MONTH(P_DATE DATE) RETURN DATE;
-  -- GET_FIRST_OF_CURRENT_H_MONTH
-  FUNCTION GET_FIRST_OF_CURRENT_H_MONTH RETURN DATE;
+  -- GET_FIRST_OF_HEJRI_MONTH
+  FUNCTION GET_FIRST_OF_HEJRI_MONTH RETURN DATE;
+  -- GET_LAST_OF_HEJRI_MONTH
+  FUNCTION GET_LAST_OF_HEJRI_MONTH(P_DATE DATE) RETURN DATE;
+  -- GET_LAST_OF_HEJRI_MONTH
+  FUNCTION GET_LAST_OF_HEJRI_MONTH RETURN DATE;
+
   -- GET_FIRST_OF_N_MONTHS_NEXT_AGO
   FUNCTION GET_FIRST_OF_N_MONTHS_NEXT_AGO(P_DATE DATE
                                          ,P_N    NUMBER) RETURN DATE;
   -- GET_FIRST_OF_N_MONTHS_NEXT_AGO
   FUNCTION GET_FIRST_OF_N_MONTHS_NEXT_AGO(P_N NUMBER) RETURN DATE;
+  -- GET_LAST_OF_N_MONTHS_NEXT_AGO
+  FUNCTION GET_LAST_OF_N_MONTHS_NEXT_AGO(P_DATE DATE
+                                        ,P_N    NUMBER) RETURN DATE;
+  -- GET_LAST_OF_N_MONTHS_NEXT_AGO
+  FUNCTION GET_LAST_OF_N_MONTHS_NEXT_AGO(P_N NUMBER) RETURN DATE;
+
+  -- GET_FIRST_OF_N_YEARS_NEXT_AGO --------------------------------------
+  FUNCTION GET_FIRST_OF_N_YEARS_NEXT_AGO(P_DATE DATE
+                                        ,P_N    NUMBER) RETURN DATE;
+  -- GET_FIRST_OF_N_YEARS_NEXT_AGO --------------------------------------
+  FUNCTION GET_FIRST_OF_N_YEARS_NEXT_AGO(P_N NUMBER) RETURN DATE;
+  -- GET_LAST_OF_N_YEARS_NEXT_AGO --------------------------------------
+  FUNCTION GET_LAST_OF_N_YEARS_NEXT_AGO(P_DATE DATE
+                                       ,P_N    NUMBER) RETURN DATE;
+  -- GET_LAST_OF_N_YEARS_NEXT_AGO --------------------------------------
+  FUNCTION GET_LAST_OF_N_YEARS_NEXT_AGO(P_N NUMBER) RETURN DATE;
+
   -- GET_SHANBEH_OF --------------------------------------
   FUNCTION GET_SHANBEH(P_DATE DATE) RETURN DATE;
   -- GET_WEEK_DAY_NAME --------------------------------------
@@ -19,9 +41,17 @@ CREATE OR REPLACE PACKAGE MAM_HEJRI_DATE_HANDLING_PKG IS
   FUNCTION GET_MONTH_DAY_NAME(P_DATE DATE) RETURN VARCHAR2;
 
 END;
-/
-CREATE OR REPLACE PACKAGE BODY MAM_HEJRI_DATE_HANDLING_PKG IS
 
+/*EXPORT/IMPORT BY IRISA_RABBANI AT 30/05/1403
+        AND THE LOG_ID IS 3896*/
+/
+CREATE OR REPLACE PACKAGE BODY "MAM_HEJRI_DATE_HANDLING_PKG" IS
+
+  -- MINUS_ONE_SECOND --------------------------------------
+  FUNCTION MINUS_A_MOMENT(P_DATE DATE) RETURN DATE IS
+  BEGIN
+    RETURN P_DATE -(1 / 172800);
+  END;
   -- GET_FIRST_OF_HEJRI_MONTH --------------------------------------
   FUNCTION GET_FIRST_OF_HEJRI_MONTH(P_DATE DATE) RETURN DATE IS
     LV_D VARCHAR2(20) := TO_CHAR(NVL(P_DATE, SYSDATE)
@@ -31,10 +61,24 @@ CREATE OR REPLACE PACKAGE BODY MAM_HEJRI_DATE_HANDLING_PKG IS
     LV_D := LV_D || '/01';
     RETURN TO_DATE(LV_D, 'YYYY/MM/DD', 'NLS_CALENDAR=PERSIAN');
   END;
-  -- GET_FIRST_OF_CURRENT_H_MONTH --------------------------------------
-  FUNCTION GET_FIRST_OF_CURRENT_H_MONTH RETURN DATE IS
+  -- GET_FIRST_OF_HEJRI_MONTH --------------------------------------
+  FUNCTION GET_FIRST_OF_HEJRI_MONTH RETURN DATE IS
   BEGIN
     RETURN GET_FIRST_OF_HEJRI_MONTH(P_DATE => SYSDATE);
+  END;
+  -- GET_LAST_OF_HEJRI_MONTH --------------------------------------
+  FUNCTION GET_LAST_OF_HEJRI_MONTH(P_DATE DATE) RETURN DATE IS
+    LV_D DATE := MAM_HEJRI_DATE_HANDLING_PKG.GET_FIRST_OF_N_MONTHS_NEXT_AGO(P_DATE => P_DATE
+                                                                           ,P_N    => 1);
+  
+  BEGIN
+    LV_D := MINUS_A_MOMENT(LV_D);
+    RETURN LV_D;
+  END;
+  -- GET_LAST_OF_HEJRI_MONTH --------------------------------------
+  FUNCTION GET_LAST_OF_HEJRI_MONTH RETURN DATE IS
+  BEGIN
+    RETURN MAM_HEJRI_DATE_HANDLING_PKG.GET_LAST_OF_HEJRI_MONTH(P_DATE => NULL);
   END;
   -- GET_FIRST_OF_N_MONTHS_NEXT_AGO --------------------------------------
   FUNCTION GET_FIRST_OF_N_MONTHS_NEXT_AGO(P_DATE DATE
@@ -53,7 +97,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_HEJRI_DATE_HANDLING_PKG IS
     THEN
       LV_M := LV_M + 12;
     END IF;
-
+  
     IF LV_N < 1
     THEN
       LV_Y := LV_Y + TRUNC((LV_N - 12) / 12);
@@ -64,13 +108,78 @@ CREATE OR REPLACE PACKAGE BODY MAM_HEJRI_DATE_HANDLING_PKG IS
     LV_D := TO_DATE(LV_Y || '/' || LPAD(LV_M, 2, '0') || '/01'
                    ,'YYYY/MM/DD'
                    ,'NLS_CALENDAR=PERSIAN');
-
+  
     RETURN LV_D;
   END;
   -- GET_FIRST_OF_N_MONTHS_NEXT_AGO --------------------------------------
   FUNCTION GET_FIRST_OF_N_MONTHS_NEXT_AGO(P_N NUMBER) RETURN DATE IS
   BEGIN
     RETURN GET_FIRST_OF_N_MONTHS_NEXT_AGO(P_DATE => SYSDATE, P_N => P_N);
+  END;
+
+  -- GET_FIRST_OF_N_MONTHS_NEXT_AGO --------------------------------------
+  FUNCTION GET_LAST_OF_N_MONTHS_NEXT_AGO(P_DATE DATE
+                                        ,P_N    NUMBER) RETURN DATE IS
+    LV_D DATE := MAM_HEJRI_DATE_HANDLING_PKG.GET_FIRST_OF_N_MONTHS_NEXT_AGO( --
+                                                                            P_DATE => NVL(P_DATE
+                                                                                         ,SYSDATE)
+                                                                           ,P_N    => P_N + 1
+                                                                            --
+                                                                            );
+  BEGIN
+    LV_D := MINUS_A_MOMENT(LV_D);
+    RETURN LV_D;
+  END;
+  -- GET_FIRST_OF_N_MONTHS_NEXT_AGO --------------------------------------
+  FUNCTION GET_LAST_OF_N_MONTHS_NEXT_AGO(P_N NUMBER) RETURN DATE IS
+  BEGIN
+    RETURN GET_LAST_OF_N_MONTHS_NEXT_AGO( --
+                                         P_DATE => NULL
+                                        ,P_N    => P_N
+                                         --
+                                         );
+  END;
+  -- GET_FIRST_OF_N_YEARS_NEXT_AGO --------------------------------------
+  FUNCTION GET_FIRST_OF_N_YEARS_NEXT_AGO(P_DATE DATE
+                                        ,P_N    NUMBER) RETURN DATE IS
+    LV_D DATE := NVL(P_DATE, SYSDATE);
+    LV_Y NUMBER := TO_NUMBER(TO_CHAR(LV_D, 'YYYY', 'NLS_CALENDAR=PERSIAN')) + P_N;
+  BEGIN
+    LV_D := TO_DATE(LV_Y || '/01/01', 'YYYY/MM/DD', 'NLS_CALENDAR=PERSIAN');
+  
+    RETURN LV_D;
+  END;
+  -- GET_FIRST_OF_N_YEARS_NEXT_AGO --------------------------------------
+  FUNCTION GET_FIRST_OF_N_YEARS_NEXT_AGO(P_N NUMBER) RETURN DATE IS
+  BEGIN
+    RETURN GET_FIRST_OF_N_YEARS_NEXT_AGO( --
+                                         P_DATE => SYSDATE
+                                        ,P_N    => P_N
+                                         --
+                                         );
+  END;
+  -- GET_LAST_OF_N_YEARS_NEXT_AGO --------------------------------------
+  FUNCTION GET_LAST_OF_N_YEARS_NEXT_AGO(P_DATE DATE
+                                       ,P_N    NUMBER) RETURN DATE IS
+    LV_D DATE := MAM_HEJRI_DATE_HANDLING_PKG.GET_FIRST_OF_N_YEARS_NEXT_AGO( --
+                                                                           P_DATE => NVL(P_DATE
+                                                                                        ,SYSDATE)
+                                                                          ,P_N    => P_N + 1
+                                                                           --
+                                                                           );
+  BEGIN
+    LV_D := MINUS_A_MOMENT(LV_D);
+    RETURN LV_D;
+  END;
+  -- GET_LAST_OF_N_YEARS_NEXT_AGO --------------------------------------
+  FUNCTION GET_LAST_OF_N_YEARS_NEXT_AGO(P_N NUMBER) RETURN DATE IS
+  
+  BEGIN
+    RETURN GET_LAST_OF_N_YEARS_NEXT_AGO( --
+                                        P_DATE => NULL
+                                       ,P_N    => P_N
+                                        --
+                                        );
   END;
   -- GET_SHANBEH_OF --------------------------------------
   FUNCTION GET_SHANBEH(P_DATE DATE) RETURN DATE IS
@@ -321,4 +430,7 @@ BEGIN
   -- Initialization
   NULL;
 END;
+
+/*EXPORT/IMPORT BY IRISA_RABBANI AT 30/05/1403
+        AND THE LOG_ID IS 3896*/
 /

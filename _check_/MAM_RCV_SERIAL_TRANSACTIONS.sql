@@ -28,11 +28,12 @@ SELECT (SELECT I.COD_ITEM || ': ' || I.DES_ITEM
               --                         AND RX.NUM_RECEIPT_AP_MRCV IN (&NUM_RECEIPT_AP_MRCV)
               
            AND EXISTS (SELECT NULL
-                  FROM MAM.MAM_ITEMS I
-                 WHERE I.COD_ITEM IN (&COD_ITEM)
-                   AND RX.ITEM_ITEM_ID = I.ITEM_ID)
+                  FROM MAM.MAM_ITEMS I2
+                 WHERE I2.COD_ITEM IN (&COD_ITEM)
+                   AND RX.ITEM_ITEM_ID = I2.ITEM_ID)
         
         --
         )
+--   AND RXS.NUM_SERIAL_MRCVS IN (&NUM_SERIAL_MRCVS)
  ORDER BY 3, RXS.MRCV_RCV_TRANSACTION_ID
-   FOR UPDATE
+--   FOR UPDATE

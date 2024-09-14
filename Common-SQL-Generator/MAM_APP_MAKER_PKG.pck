@@ -1470,7 +1470,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
       I          := I + 1;
     END LOOP;
     LV_RESULT := LV_RESULT ||
-                 ' LV_SQL := LV_SQL ||'' FROM DUAL'';app_mam_global_temps_pkg.EXEC_IMDT(LV_SQL); exception when others then null; end;';
+                 ' LV_SQL := LV_SQL ||'' FROM DUAL'';MAM_EXECUTE_IMMEDIATE_PKG.EXEC_IMDT(LV_SQL); exception when others then null; end;';
     LV_RESULT := LV_RESULT || CHR(10) || 'end;';
     RETURN UPPER(TRIM(LV_RESULT));
   END;
@@ -1917,12 +1917,12 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
     LV_RESULT := LV_RESULT || CHR(10) || '--' || CHR(10) ||
                  '||CHR(10)||CHR(47)||CHR(42)||C_DATE||CHR(42)||CHR(47);';
     LV_RESULT := LV_RESULT || CHR(10) ||
-                 'APP_MAM_GLOBAL_TEMPS_PKG.EXEC_IMDT(LV_SQL);';
+                 'MAM_EXECUTE_IMMEDIATE_PKG.EXEC_IMDT(LV_SQL);';
     LV_RESULT := LV_RESULT || CHR(10) ||
                  'LV_SQL := ''COMMENT ON  TABLE ''|| P_FILTER_VIEW_NAME ||'' IS ' ||
                  CHR(39) || CHR(39) || '›Ì· — ' || TABLE_COMMENT_FUN ||
                  CHR(39) || CHR(39) || CHR(39) || ';' || CHR(10) ||
-                 'APP_MAM_GLOBAL_TEMPS_PKG.EXEC_IMDT(LV_SQL);';
+                 'MAM_EXECUTE_IMMEDIATE_PKG.EXEC_IMDT(LV_SQL);';
     LV_RESULT := LV_RESULT || CHR(10) || 'END;';
     RETURN UPPER(TRIM(LV_RESULT));
   END;
@@ -2252,7 +2252,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APP_MAKER_PKG IS
     LV_RESULT := LV_RESULT || CHR(10) ||
                  'LV_SQL := ''DROP VIEW '' || P_FILTER_VIEW_NAME;';
     LV_RESULT := LV_RESULT || CHR(10) ||
-                 'APP_MAM_GLOBAL_TEMPS_PKG.EXEC_IMDT(LV_SQL);';
+                 'MAM_EXECUTE_IMMEDIATE_PKG.EXEC_IMDT(LV_SQL);';
     LV_RESULT := LV_RESULT || CHR(10) || 'END IF;' || CHR(10) || 'END;';
     RETURN UPPER(TRIM(LV_RESULT));
   END;

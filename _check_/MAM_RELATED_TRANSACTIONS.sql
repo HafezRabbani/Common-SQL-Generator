@@ -1,0 +1,9 @@
+SELECT *
+  FROM MAM.MAM_RELATED_TRANSACTIONS RT
+ WHERE ( --
+        RT.MTRAN_XID_MRTRN IN (&XID) OR RT.MTRAN_XID2_MRTRN IN (&XID)
+       --    
+       )
+--
+
+   FOR UPDATE

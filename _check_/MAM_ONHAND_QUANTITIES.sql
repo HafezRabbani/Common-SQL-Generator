@@ -31,8 +31,13 @@ SELECT Q.ONHAND_QUANTITY_ID
       ,Q.ATTACH_ID
   FROM MAM.MAM_ONHAND_QUANTITIES Q
  WHERE 1 = 1
-       AND Q.ITEM_ITEM_ID =
-       (SELECT ITEM_ID
-              FROM MAM.MAM_ITEMS I
-             WHERE I.COD_ITEM = TRIM('&COD_ITEM'))
+      
+   AND Q.ITEM_ITEM_ID = (SELECT ITEM_ID
+                           FROM MAM.MAM_ITEMS I
+                          WHERE 1 = 1
+                               --                            AND I.LKP_STA_INVENTORY_ITEM = 1
+                            AND I.COD_ITEM = TRIM('&COD_ITEM')
+                         --
+                         )
+
 --   FOR UPDATE

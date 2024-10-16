@@ -54,7 +54,7 @@ SELECT FA.MSER_SERIAL_NUMBER_ID AS S_ID
 --      ,FA.NUM_DCM_FIXAS
   FROM FIA.FIA_FIXED_ASSETS FA
  WHERE 1 = 1
-   AND FA.MSER_SERIAL_NUMBER_ID IN (&SERIAL_NUMBER_ID)
+      --   AND FA.MSER_SERIAL_NUMBER_ID IN (&SERIAL_NUMBER_ID)
    AND EXISTS (SELECT NULL
           FROM MAM.MAM_ITEMS I
          WHERE FA.ITEM_ITEM_ID = I.ITEM_ID
@@ -111,6 +111,7 @@ SELECT DISTINCT A.MSER_SERIAL_NUMBER_ID
                 --      ,A.ITEM_ITEM_ID
                 --      ,M.NUM_EMPL_REC_ASMVM
                ,X.MATERIAL_TRANSACTION_ID
+               ,X.MTYP_TRANSACTION_TYPE_ID
   FROM FIA.FIA_ASSET_MOVEMENTS M
  INNER JOIN FIA.FIA_ASSET_MOVEMENT_RELATIONS R
     ON M.ASSET_MOVEMENT_ID = R.ASMVM_ASSET_MOVEMENT_ID
@@ -129,7 +130,7 @@ SELECT DISTINCT A.MSER_SERIAL_NUMBER_ID
           FROM MAM.MAM_ITEMS I
          WHERE A.ITEM_ITEM_ID = I.ITEM_ID
            AND I.COD_ITEM IN (&COD_ITEM))
-   AND A.MSER_SERIAL_NUMBER_ID IN (&SERIAL_NUMBER_ID)
+--   AND A.MSER_SERIAL_NUMBER_ID IN (&SERIAL_NUMBER_ID)
 --
 ;
 ----
@@ -143,7 +144,7 @@ SELECT Y.MSER_SERIAL_NUMBER_ID
               DAT_TRANSACTION_MTRAN != DAT_TRANSACTION_MRCV THEN
           'dat_x!=Dat_rx'
        END AS ERR1
-
+       
       ,MTYP_TRANSACTION_TYPE_ID
   FROM ( --
         SELECT DISTINCT Z.MSER_SERIAL_NUMBER_ID
@@ -162,7 +163,7 @@ SELECT Y.MSER_SERIAL_NUMBER_ID
                             FROM MAM.MAM_MATERIAL_TRANSACTIONS X
                            WHERE X.MATERIAL_TRANSACTION_ID =
                                  Z.MTRAN_MATERIAL_TRANSACTION_ID) AS MTYP_TRANSACTION_TYPE_ID
-
+        
           FROM MAM.MAM_SERIAL_NUMBERS S
          INNER JOIN ( --
                      SELECT FA.MSER_SERIAL_NUMBER_ID
@@ -170,7 +171,7 @@ SELECT Y.MSER_SERIAL_NUMBER_ID
                             ,FA.MRCV_RCV_TRANSACTION_ID
                        FROM FIA.FIA_FIXED_ASSETS FA
                       WHERE 1 = 1
-                        AND FA.MSER_SERIAL_NUMBER_ID IN (&SERIAL_NUMBER_ID)
+                           --                        AND FA.MSER_SERIAL_NUMBER_ID IN (&SERIAL_NUMBER_ID)
                         AND EXISTS
                       (SELECT NULL
                                FROM MAM.MAM_ITEMS I
@@ -199,8 +200,8 @@ SELECT Y.MSER_SERIAL_NUMBER_ID
                                FROM MAM.MAM_ITEMS I
                               WHERE A.ITEM_ITEM_ID = I.ITEM_ID
                                 AND I.COD_ITEM IN (&COD_ITEM))
-                        AND A.MSER_SERIAL_NUMBER_ID IN (&SERIAL_NUMBER_ID)
-
+                     --                        AND A.MSER_SERIAL_NUMBER_ID IN (&SERIAL_NUMBER_ID)
+                     
                      --
                      ) Z
             ON S.SERIAL_NUMBER_ID = Z.MSER_SERIAL_NUMBER_ID

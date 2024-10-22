@@ -40,7 +40,7 @@ SELECT --
   FROM MAM.MAM_MATERIAL_TRANSACTIONS X
  WHERE 1 = 1
       --AND X.MATERIAL_TRANSACTION_ID IN (&MATERIAL_TRANSACTION_ID)
-      /*     
+ 
             AND ( --
                  X.MATERIAL_TRANSACTION_ID IN
                  ( --
@@ -66,7 +66,7 @@ SELECT --
                  OR X.ID_TRANSFER_MTRAN IN (&MATERIAL_TRANSACTION_ID)
                 --
                 )
-      */
+
       --AND X.MREQL_REQUEST_LINE_ID IN (&REQUEST_LINE_ID)
       /*      
              AND EXISTS
@@ -99,10 +99,12 @@ SELECT --
       -- AND X.CREATE_DATE > TRUNC(SYSDATE) 
       -- AND TRUNC(X.CREATE_DATE) = TRUNC(SYSDATE)
       --AND TRUNC(X.CREATE_DATE) =trunc(TO_DATE('&CREATE_DATE', 'YYYY/MM/DD', 'NLS_CALENDAR=PERSIAN'))
+/*
    AND X.DAT_TRANSACTION_MTRAN >=
        TO_DATE('&DAT_TRANSACTION_MTRAN'
               ,'YYYY/MM/DD HH24:MI:SS'
               ,'NLS_CALENDAR=PERSIAN')
+*/
 /*
        AND TRUNC(X.DAT_TRANSACTION_MTRAN) =
        TRUNC(TO_DATE('&Dat_Transaction_Mtran'

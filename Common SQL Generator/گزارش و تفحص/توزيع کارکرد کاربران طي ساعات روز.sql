@@ -1,0 +1,35 @@
+WITH BASE AS
+ ( --
+  SELECT HH24
+         ,CNT
+         ,TOTAL_CNT
+         ,CNT / TOTAL_CNT * 100 AS PERCENTAGE
+         ,DURATION
+    FROM ( --
+           SELECT TO_NUMBER(TO_CHAR(X.CREATE_DATE, 'hh24')) AS HH24
+                  ,COUNT(1) AS CNT
+             FROM MAM.MAM_MATERIAL_TRANSACTIONS X
+            GROUP BY TO_CHAR(X.CREATE_DATE, 'hh24')
+           --
+           )
+   CROSS JOIN (SELECT COUNT(1) AS TOTAL_CNT
+                     ,TRUNC(MAX(X2.CREATE_DATE) - MIN(X2.CREATE_DATE)) AS DURATION
+                 FROM MAM.MAM_MATERIAL_TRANSACTIONS X2)
+  --
+  )
+SELECT HH24
+      ,CASE
+         WHEN HH24 < 13 THEN
+          'AM'
+         ELSE
+          'PM'
+       END AS AM_PM
+      ,TOTAL_CNT / 24 AS AVERAGE_PER_HOUR
+      ,CNT
+      ,TOTAL_CNT
+      ,DURATION
+      ,TOTAL_CNT / DURATION AS AVERAGE_PER_DAY
+      ,ROUND(PERCENTAGE, 2) || ' %' AS TRANSACTION_PERCENTAGE
+      ,PERCENTAGE
+  FROM BASE
+ ORDER BY PERCENTAGE

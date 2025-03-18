@@ -20,7 +20,7 @@ SELECT L.LOT_NUMBER_ID
   FROM MAM.MAM_LOT_NUMBERS L
  WHERE 1 = 1
       -- and l.lot_number_id=&lot_number_id
-   AND L.COD_LOT_MLOT = &COD_LOT_MLOT
+   AND (L.COD_LOT_MLOT = &COD_LOT_MLOT OR &COD_LOT_MLOT IS NULL)
    AND L.ITEM_ITEM_ID IN ( --
                           SELECT ITEM_ID
                             FROM MAM.MAM_ITEMS I
@@ -28,7 +28,7 @@ SELECT L.LOT_NUMBER_ID
                           --
                           )
 
---   FOR UPDATE
+   FOR UPDATE
 --
 ;
 SELECT L.LOT_NUMBER_ID
@@ -50,7 +50,7 @@ SELECT L.LOT_NUMBER_ID
     ON L.LOT_NUMBER_ID = XL.MLOT_LOT_NUMBER_ID
  WHERE 1 = 1
       --   AND L.LOT_NUMBER_ID = &LOT_NUMBER_ID
-   AND L.COD_LOT_MLOT = &COD_LOT_MLOT
+   AND (L.COD_LOT_MLOT = &COD_LOT_MLOT OR &COD_LOT_MLOT IS NULL)
       
    AND L.ITEM_ITEM_ID IN ( --
                           SELECT ITEM_ID

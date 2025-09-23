@@ -384,13 +384,13 @@ CREATE OR REPLACE PACKAGE BODY MAM_LOG_AND_COMMIT_MAKER_PKG IS
                    'LV_LOG_AFFECTED_RECORD_ID MAM_LOG_AFFECTED_RECORDS.LOG_AFFECTED_RECORD_ID%TYPE;';
       LV_RESULT := LV_RESULT || CHR(10) || ' BEGIN ';
       LV_RESULT := LV_RESULT || CHR(10) ||
-                   'LV_LOG_RESULT := APP_MAM_LOGS_PKG.ADD( --';
+                   'LV_LOG_RESULT := MAM_LOGS_WRP_PKG.ADD_CMT( --';
       LV_RESULT := LV_RESULT || CHR(10) ||
                    'P_LOG_ID                   => LV_LOG_ID';
       LV_RESULT := LV_RESULT || CHR(10) || ',P_NAM_CALLER_ROUTINE_MLOGS => ''' || CASE
                      WHEN LV_PACKAGE_NAME IS NOT NULL THEN
                       LV_PACKAGE_NAME || '.'
-                   END || LV_ROUTINE_CREATED || '''';
+                   END || LV_ROUTINE_NAME || '''';
       /*
             LV_RESULT := LV_RESULT || CHR(10) ||
                          ',P_TXT_PARAMETERS_MLOGS     => ''' ||
@@ -463,7 +463,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_LOG_AND_COMMIT_MAKER_PKG IS
         LV_RESULT := LV_RESULT || CHR(10) || 'IF LV_RESULT IS NULL';
         LV_RESULT := LV_RESULT || CHR(10) || 'THEN';
         LV_RESULT := LV_RESULT || CHR(10) ||
-                     'LV_LOG_RESULT := MAM_LOG_AFFECTED_RCRDS_APP_PKG.ADD( --';
+                     'LV_LOG_RESULT := MAM_LOG_AFFECTED_RCRDS_WRP_PKG.ADD_CMT( --';
         LV_RESULT := LV_RESULT || CHR(10) ||
                      'P_LOG_AFFECTED_RECORD_ID => LV_LOG_AFFECTED_RECORD_ID';
         LV_RESULT := LV_RESULT || CHR(10) ||
@@ -480,7 +480,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_LOG_AND_COMMIT_MAKER_PKG IS
         LV_RESULT := LV_RESULT || CHR(10) || 'IF LV_LOG_ID IS NOT NULL';
         LV_RESULT := LV_RESULT || CHR(10) || 'THEN';
         LV_RESULT := LV_RESULT || CHR(10) ||
-                     'LV_LOG_RESULT := APP_MAM_LOG_RESPONSES_PKG.ADD( --';
+                     'LV_LOG_RESULT := MAM_LOG_RESPONSES_WRP_PKG.ADD_CMT( --';
         LV_RESULT := LV_RESULT || CHR(10) ||
                      'P_LOG_RESPONSE_ID    => LV_LOG_RESPONSE_ID';
         LV_RESULT := LV_RESULT || CHR(10) ||

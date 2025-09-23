@@ -5,11 +5,6 @@ CREATE OR REPLACE PACKAGE MAM_TEXT_HANDLING_PKG IS
                            --
                            ) RETURN VARCHAR2;
 
-  -- NUMBER_TO_STRING -----------------------------------------
-  FUNCTION NUMBER_TO_STRING( --
-                            P_INPUT NUMBER
-                            --
-                            ) RETURN VARCHAR2;
   -- MAKE_TABLE_FROM_VALUES -----------------------------------------
   FUNCTION MAKE_TABLE_FROM_VALUES( --
                                   P_COLUMN1_VALUE    VARCHAR2
@@ -19,15 +14,15 @@ CREATE OR REPLACE PACKAGE MAM_TEXT_HANDLING_PKG IS
                                  ,P_WITH_ROW_COUNTER NUMBER --0 WITHOUT ROW COUNTER 
                                   --
                                   ) RETURN VARCHAR2;
-  /*
-    -- MAKE_TABLE_FROM_VALUES -----------------------------------------
-    FUNCTION MAKE_TABLE_FROM_VALUES( --
-                                    P_VALUES           VARCHAR2
-                                   ,P_ALIASES          VARCHAR2
-                                   ,P_WITH_ROW_COUNTER NUMBER --0 WITHOUT ROW COUNTER 
-                                    --
-                                    ) RETURN VARCHAR2;
-  */
+/*
+  -- MAKE_TABLE_FROM_VALUES -----------------------------------------
+  FUNCTION MAKE_TABLE_FROM_VALUES( --
+                                  P_VALUES           VARCHAR2
+                                 ,P_ALIASES          VARCHAR2
+                                 ,P_WITH_ROW_COUNTER NUMBER --0 WITHOUT ROW COUNTER 
+                                  --
+                                  ) RETURN VARCHAR2;
+*/
 
 END;
 /
@@ -40,14 +35,6 @@ CREATE OR REPLACE PACKAGE BODY MAM_TEXT_HANDLING_PKG IS
                            ) RETURN VARCHAR2 IS
   BEGIN
     RETURN DBMS_ASSERT.ENQUOTE_LITERAL(P_INPUT);
-  END;
-  -- NUMBER_TO_STRING -----------------------------------------
-  FUNCTION NUMBER_TO_STRING( --
-                            P_INPUT NUMBER
-                            --
-                            ) RETURN VARCHAR2 IS
-  BEGIN
-    RETURN FND.FND_DESCRIBE_NUMBERS_FUN(P_INPUT);
   END;
   -- MAKE_COLUMN -----------------------------------------
   FUNCTION MAKE_COLUMN( --
@@ -271,8 +258,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_TEXT_HANDLING_PKG IS
                                     P_COLUMN_VALUE => P_COLUMN2_VALUE
                                     --
                                     );
-    WHILE LV_INPUT1 IS NOT NULL
-          OR LV_INPUT2 IS NOT NULL
+    WHILE LV_INPUT1 IS NOT NULL OR LV_INPUT2 IS NOT NULL
     LOOP
       LV_COUNTER    := LV_COUNTER + 1;
       LV_INPUT1     := TRIM(LV_INPUT1);
@@ -313,74 +299,74 @@ CREATE OR REPLACE PACKAGE BODY MAM_TEXT_HANDLING_PKG IS
     END LOOP;
     RETURN LV_RESULT;
   END;
-  /*
-    -- MAKE_TABLE_FROM_VALUES -----------------------------------------
-    FUNCTION MAKE_TABLE_FROM_VALUES( --
-                                    P_VALUES           VARCHAR2
-                                   ,P_ALIASES          VARCHAR2
-                                   ,P_WITH_ROW_COUNTER NUMBER --0 WITHOUT ROW COUNTER 
+/*
+  -- MAKE_TABLE_FROM_VALUES -----------------------------------------
+  FUNCTION MAKE_TABLE_FROM_VALUES( --
+                                  P_VALUES           VARCHAR2
+                                 ,P_ALIASES          VARCHAR2
+                                 ,P_WITH_ROW_COUNTER NUMBER --0 WITHOUT ROW COUNTER 
+                                  --
+                                  ) RETURN VARCHAR2 IS
+    LV_INPUT1        VARCHAR2(32767);
+    LV_INPUT2        VARCHAR2(32767);
+    LV_RESULT        VARCHAR2(32767);
+    LV_COMMA_LOC1    NUMBER;
+    LV_COMMA_LOC2    NUMBER;
+    LV_COLUMN1_VALUE VARCHAR2(32767);
+    LV_COLUMN2_VALUE VARCHAR2(32767);
+  
+    LV_COUNTER NUMBER := 0;
+  BEGIN
+    LV_INPUT1 := PREPROCCESS_VALUES( --
+                                    P_COLUMN_VALUE => P_COLUMN1_VALUE
                                     --
-                                    ) RETURN VARCHAR2 IS
-      LV_INPUT1        VARCHAR2(32767);
-      LV_INPUT2        VARCHAR2(32767);
-      LV_RESULT        VARCHAR2(32767);
-      LV_COMMA_LOC1    NUMBER;
-      LV_COMMA_LOC2    NUMBER;
-      LV_COLUMN1_VALUE VARCHAR2(32767);
-      LV_COLUMN2_VALUE VARCHAR2(32767);
+                                    );
+    LV_INPUT2 := PREPROCCESS_VALUES( --
+                                    P_COLUMN_VALUE => P_COLUMN2_VALUE
+                                    --
+                                    );
+    WHILE LV_INPUT1 IS NOT NULL OR LV_INPUT2 IS NOT NULL
+    LOOP
+      LV_COUNTER    := LV_COUNTER + 1;
+      LV_INPUT1     := TRIM(LV_INPUT1);
+      LV_COMMA_LOC1 := INSTR(LV_INPUT1, ',');
+      IF LV_COMMA_LOC1 > 0
+      THEN
+        LV_COLUMN1_VALUE := SUBSTR(LV_INPUT1, 1, LV_COMMA_LOC1 - 1);
+        LV_INPUT1        := SUBSTR(LV_INPUT1
+                                  ,LV_COMMA_LOC1 + 1
+                                  ,LENGTH(LV_INPUT1) - LV_COMMA_LOC1);
+      ELSE
+        LV_COLUMN1_VALUE := LV_INPUT1;
+        LV_INPUT1        := NULL;
+      END IF;
     
-      LV_COUNTER NUMBER := 0;
-    BEGIN
-      LV_INPUT1 := PREPROCCESS_VALUES( --
-                                      P_COLUMN_VALUE => P_COLUMN1_VALUE
-                                      --
-                                      );
-      LV_INPUT2 := PREPROCCESS_VALUES( --
-                                      P_COLUMN_VALUE => P_COLUMN2_VALUE
-                                      --
-                                      );
-      WHILE LV_INPUT1 IS NOT NULL OR LV_INPUT2 IS NOT NULL
-      LOOP
-        LV_COUNTER    := LV_COUNTER + 1;
-        LV_INPUT1     := TRIM(LV_INPUT1);
-        LV_COMMA_LOC1 := INSTR(LV_INPUT1, ',');
-        IF LV_COMMA_LOC1 > 0
-        THEN
-          LV_COLUMN1_VALUE := SUBSTR(LV_INPUT1, 1, LV_COMMA_LOC1 - 1);
-          LV_INPUT1        := SUBSTR(LV_INPUT1
-                                    ,LV_COMMA_LOC1 + 1
-                                    ,LENGTH(LV_INPUT1) - LV_COMMA_LOC1);
-        ELSE
-          LV_COLUMN1_VALUE := LV_INPUT1;
-          LV_INPUT1        := NULL;
-        END IF;
-      
-        LV_INPUT2     := TRIM(LV_INPUT2);
-        LV_COMMA_LOC2 := INSTR(LV_INPUT2, ',');
-        IF LV_COMMA_LOC2 > 0
-        THEN
-          LV_COLUMN2_VALUE := SUBSTR(LV_INPUT2, 1, LV_COMMA_LOC2 - 1);
-          LV_INPUT2        := SUBSTR(LV_INPUT2
-                                    ,LV_COMMA_LOC2 + 1
-                                    ,LENGTH(LV_INPUT2) - LV_COMMA_LOC2);
-        ELSE
-          LV_COLUMN2_VALUE := LV_INPUT2;
-          LV_INPUT2        := NULL;
-        END IF;
-      
-        LV_RESULT := LV_RESULT || MAKE_ROW( --
-                                           P_COLUMN1_VALUE    => LV_COLUMN1_VALUE
-                                          ,P_COLUMN1_ALIAS    => P_COLUMN1_ALIAS
-                                          ,P_COLUMN2_VALUE    => LV_COLUMN2_VALUE
-                                          ,P_COLUMN2_ALIAS    => P_COLUMN2_ALIAS
-                                          ,P_WITH_ROW_COUNTER => P_WITH_ROW_COUNTER
-                                          ,P_COUNTER          => LV_COUNTER
-                                           --
-                                           );
-      END LOOP;
-      RETURN LV_RESULT;
-    END;
-  */
+      LV_INPUT2     := TRIM(LV_INPUT2);
+      LV_COMMA_LOC2 := INSTR(LV_INPUT2, ',');
+      IF LV_COMMA_LOC2 > 0
+      THEN
+        LV_COLUMN2_VALUE := SUBSTR(LV_INPUT2, 1, LV_COMMA_LOC2 - 1);
+        LV_INPUT2        := SUBSTR(LV_INPUT2
+                                  ,LV_COMMA_LOC2 + 1
+                                  ,LENGTH(LV_INPUT2) - LV_COMMA_LOC2);
+      ELSE
+        LV_COLUMN2_VALUE := LV_INPUT2;
+        LV_INPUT2        := NULL;
+      END IF;
+    
+      LV_RESULT := LV_RESULT || MAKE_ROW( --
+                                         P_COLUMN1_VALUE    => LV_COLUMN1_VALUE
+                                        ,P_COLUMN1_ALIAS    => P_COLUMN1_ALIAS
+                                        ,P_COLUMN2_VALUE    => LV_COLUMN2_VALUE
+                                        ,P_COLUMN2_ALIAS    => P_COLUMN2_ALIAS
+                                        ,P_WITH_ROW_COUNTER => P_WITH_ROW_COUNTER
+                                        ,P_COUNTER          => LV_COUNTER
+                                         --
+                                         );
+    END LOOP;
+    RETURN LV_RESULT;
+  END;
+*/
 BEGIN
   NULL;
 END;

@@ -21,9 +21,7 @@
 END;
 /
 CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
-  --  C_IS_PK     CONSTANT NUMBER := 1;
-  C_IS_NOT_PK CONSTANT NUMBER := 0;
-  --   GV_TABLENAME VARCHAR2(128);
+  C_IS_NOT_PK    CONSTANT NUMBER := 0;
   CV_BEAUTY_DASH CONSTANT VARCHAR2(40) := ' ' || LPAD('-', 30, '-');
 
   CURSOR TB_UK(P_TABLENAME VARCHAR2) IS
@@ -593,10 +591,6 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
                            ) RETURN CLOB IS
     LV_RESULT CLOB; --VARCHAR2(128);
   BEGIN
-    /*
-        LV_RESULT := UPPER(MAM_REMOVE_VOWELS_FUN(PREFIX || INFIX || POSTFIX
-                                                ,30 - LENGTH(PREFIX || POSTFIX)));
-    */
     LV_RESULT := UPPER(MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(PREFIX ||
                                                                 INFIX ||
                                                                 POSTFIX
@@ -704,33 +698,6 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     END IF;
     RETURN LV_RESULT;
   END;
-  /*  
-      FUNCTION CREATE_FLTR_PACKAGE_NAME( --
-                                        TABLE_NAME VARCHAR2 --
-                                        ) RETURN CLOB IS
-        LV_RESULT VARCHAR2(128);
-        C_PREFIX  CONSTANT VARCHAR2(10) := NULL;
-        C_POSTFIX CONSTANT VARCHAR2(10) := '_FLTR_PKG';
-      BEGIN
-        LV_RESULT := UPPER(C_PREFIX ||
-                           MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(TABLE_NAME
-                                                                   ,30 -
-                                                                    (LENGTH(C_PREFIX ||
-                                                                            C_POSTFIX))) ||
-                           C_POSTFIX);
-        IF LENGTH(LV_RESULT) > 30
-        THEN
-          LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(LV_RESULT
-                                                                  ,30);
-        END IF;
-        IF LENGTH(LV_RESULT) > 30
-        THEN
-          LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_UNDERLINES_FUN(LV_RESULT
-                                                                      ,30);
-        END IF;
-        RETURN LV_RESULT;
-  END; 
-    */
   FUNCTION CREATE_FLTR_PACKAGE_DECLARATN( --
                                          P_TABLENAME  VARCHAR2
                                         ,SPEC_OR_BODY VARCHAR2
@@ -763,33 +730,6 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     END IF;
     RETURN UPPER(TRIM(LV_RESULT));
   END;
-  /*
-  FUNCTION CREATE_FLD_PACKAGE_NAME( --
-                                   TABLE_NAME VARCHAR2 --
-                                   ) RETURN CLOB IS
-    LV_RESULT VARCHAR2(128);
-    C_PREFIX  CONSTANT VARCHAR2(10) := NULL;
-    C_POSTFIX CONSTANT VARCHAR2(10) := '_FLD_PKG';
-  BEGIN
-    LV_RESULT := UPPER(C_PREFIX ||
-                       MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(TABLE_NAME
-                                                               ,30 -
-                                                                (LENGTH(C_PREFIX ||
-                                                                        C_POSTFIX))) ||
-                       C_POSTFIX);
-    IF LENGTH(LV_RESULT) > 30
-    THEN
-      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(LV_RESULT
-                                                              ,30);
-    END IF;
-    IF LENGTH(LV_RESULT) > 30
-    THEN
-      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_UNDERLINES_FUN(LV_RESULT
-                                                                  ,30);
-    END IF;
-    RETURN LV_RESULT;
-  END;
-  */
   FUNCTION CREATE_FLD_PACKAGE_DECLARATN( --
                                         P_TABLENAME  VARCHAR2
                                        ,SPEC_OR_BODY VARCHAR2
@@ -822,33 +762,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     END IF;
     RETURN UPPER(TRIM(LV_RESULT));
   END;
-  /*
-  FUNCTION CREATE_CTRL_PACKAGE_NAME( --
-                                    TABLE_NAME VARCHAR2 --
-                                    ) RETURN CLOB IS
-    LV_RESULT VARCHAR2(128);
-    C_PREFIX  CONSTANT VARCHAR2(10) := NULL;
-    C_POSTFIX CONSTANT VARCHAR2(10) := '_CTRL_PKG';
-  BEGIN
-    LV_RESULT := UPPER(C_PREFIX ||
-                       MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(TABLE_NAME
-                                                               ,30 -
-                                                                (LENGTH(C_PREFIX ||
-                                                                        C_POSTFIX))) ||
-                       C_POSTFIX);
-    IF LENGTH(LV_RESULT) > 30
-    THEN
-      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(LV_RESULT
-                                                              ,30);
-    END IF;
-    IF LENGTH(LV_RESULT) > 30
-    THEN
-      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_UNDERLINES_FUN(LV_RESULT
-                                                                  ,30);
-    END IF;
-    RETURN LV_RESULT;
-  END;
-  */
+
   FUNCTION CREATE_CTRL_PACKAGE_DECLARATN( --
                                          P_TABLENAME  VARCHAR2
                                         ,SPEC_OR_BODY VARCHAR2
@@ -904,33 +818,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     END LOOP;
     RETURN LV_RESULT;
   END;
-  /*
-  FUNCTION CREATE_APP_PACKAGE_NAME( --
-                                   TABLE_NAME VARCHAR2 --
-                                   ) RETURN VARCHAR2 IS
-    LV_RESULT VARCHAR2(128);
-    C_PREFIX  CONSTANT VARCHAR2(10) := NULL; --'APP_';
-    C_POSTFIX CONSTANT VARCHAR2(10) := '_APP_PKG';
-  BEGIN
-    LV_RESULT := UPPER(C_PREFIX ||
-                       MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(TABLE_NAME
-                                                               ,30 -
-                                                                (LENGTH(C_PREFIX ||
-                                                                        C_POSTFIX))) ||
-                       C_POSTFIX);
-    IF LENGTH(LV_RESULT) > 30
-    THEN
-      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(LV_RESULT
-                                                              ,30);
-    END IF;
-    IF LENGTH(LV_RESULT) > 30
-    THEN
-      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_UNDERLINES_FUN(LV_RESULT
-                                                                  ,30);
-    END IF;
-    RETURN LV_RESULT;
-  END;
-  */
+
   FUNCTION CREATE_APP_PACKAGE_DECLARATION( --
                                           P_TABLENAME  VARCHAR2
                                          ,SPEC_OR_BODY VARCHAR2
@@ -4033,5 +3921,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
   
     RETURN LV_RESULT;
   END;
+BEGIN
+  NULL;
 END;
 /

@@ -1,0 +1,68 @@
+﻿SELECT SUBSTR(H.NAM_HIERARCHY_HIRNM, -2, 2) INV
+      ,(SELECT S.DES_MSINV
+          FROM MAM.MAM_SUB_INVENTORIES S
+         WHERE S.NAM_SUB_INVENTORY_MSINV =
+               SUBSTR(H.NAM_HIERARCHY_HIRNM, -2, 2)) DES_MSINV
+      ,D.USRS_IDE_USER_USRS
+      ,(SELECT U.NAM_USER_USRS
+          FROM FND.FND_USERS U
+         WHERE U.IDE_USER_USRS = D.USRS_IDE_USER_USRS) U
+      ,CASE
+         WHEN EXISTS
+          (SELECT NULL
+                 FROM FND.FND_GROUP_USERS GU
+                WHERE GU.GROUP_IDE_GRP_GROUP = 'MAM_INV_GRP'
+                      AND GU.USRS_IDE_USER_USRS = D.USRS_IDE_USER_USRS) THEN
+          'گروه انبارداران'
+       END AS MAM_INV_GRP
+      ,CASE
+         WHEN EXISTS
+          (SELECT NULL
+                 FROM FND.FND_GROUP_USERS GU
+                WHERE GU.GROUP_IDE_GRP_GROUP = 'MAM_MAIN_GRP'
+                      AND GU.USRS_IDE_USER_USRS = D.USRS_IDE_USER_USRS) THEN
+          'گروه مدیران سیستم مدیریت کالا'
+       END AS MAM_MAIN_GRP
+      ,CASE
+         WHEN EXISTS
+          (SELECT NULL
+                 FROM FND.FND_GROUP_USERS GU
+                WHERE GU.GROUP_IDE_GRP_GROUP = 'MAM_INV_ADMIN_GRP'
+                      AND GU.USRS_IDE_USER_USRS = D.USRS_IDE_USER_USRS) THEN
+          'گروه سرپرست انبارها'
+       END AS MAM_INV_ADMIN_GRP
+      ,CASE
+         WHEN EXISTS
+          (SELECT NULL
+                 FROM FND.FND_GROUP_USERS GU
+                WHERE GU.GROUP_IDE_GRP_GROUP = 'MAM_SHOW_RECIVING_GRP'
+                      AND GU.USRS_IDE_USER_USRS = D.USRS_IDE_USER_USRS) THEN
+          'گروه مشاهده اطلاعات واردات و انبارها'
+       END AS MAM_SHOW_RECIVING_GRP
+      ,CASE
+         WHEN EXISTS
+          (SELECT NULL
+                 FROM FND.FND_GROUP_USERS GU
+                WHERE GU.GROUP_IDE_GRP_GROUP = 'MAM_POWER_USERS_GRP'
+                      AND GU.USRS_IDE_USER_USRS = D.USRS_IDE_USER_USRS) THEN
+          'کاربران مقتدر در سمت کارفرما'
+       END AS MAM_POWER_USERS_GRP
+      ,CASE
+         WHEN EXISTS
+          (SELECT NULL
+                 FROM FND.FND_GROUP_USERS GU
+                WHERE GU.GROUP_IDE_GRP_GROUP = 'MAM_REQUEST_ISSU_GRP'
+                      AND GU.USRS_IDE_USER_USRS = D.USRS_IDE_USER_USRS) THEN
+          'گروه درخواست کالا از انبار'
+       END AS MAM_REQUEST_ISSU_GRP
+  FROM FND.FND_HIERARCHIES H
+  LEFT OUTER JOIN FND.FND_HIERARCHY_DETAILS D
+    ON H.HIERARCHY_ID = D.HIRNM_HIERARCHY_ID
+  LEFT OUTER JOIN FND.FND_HIERARCHY_FORMS F
+    ON H.HIERARCHY_ID = F.HIRNM_HIERARCHY_ID
+ WHERE 1 = 1
+       AND H.APPLS_APPLICATION_SYSTEM_ID = 31
+      --       AND D.USRS_IDE_USER_USRS = '&IDE_USER_USRS'
+       AND H.NAM_HIERARCHY_HIRNM LIKE UPPER('SUBINVENTORY%')
+ ORDER BY 1
+         ,3

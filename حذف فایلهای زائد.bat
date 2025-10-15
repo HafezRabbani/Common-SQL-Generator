@@ -1,0 +1,5 @@
+for /R %%g in (*.~pck) do del "%%g"
+for /R %%g in (*.~sql) do del "%%g"
+for /R %%g in (*.~tst) do del "%%g"
+for /R %%g in (*.lnk) do del "%%g"
+del "\Gadget\del ~.bat"

@@ -1,8 +1,6 @@
 ﻿CREATE OR REPLACE PACKAGE MAM_APEX_APP_MAKER_PKG IS
   --
-  FUNCTION CREATE_APP_PACKAGE_NAME( --
-                                   TABLE_NAME VARCHAR2 --
-                                   ) RETURN VARCHAR2;
+  -- FUNCTION CREATE_APP_PACKAGE_NAME(TABLE_NAME VARCHAR2) RETURN VARCHAR2;
   FUNCTION CREATE_CHECK_LKP_DCL(P_TABLENAME VARCHAR2) RETURN CLOB;
   FUNCTION CREATE_CHECK_LKP_BDY(P_TABLENAME VARCHAR2) RETURN CLOB;
   FUNCTION CREATE_CHECK_LKP_IMPL(P_TABLENAME VARCHAR2) RETURN CLOB;
@@ -23,9 +21,7 @@
 END;
 /
 CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
-  --  C_IS_PK     CONSTANT NUMBER := 1;
-  C_IS_NOT_PK CONSTANT NUMBER := 0;
-  --   GV_TABLENAME VARCHAR2(128);
+  C_IS_NOT_PK    CONSTANT NUMBER := 0;
   CV_BEAUTY_DASH CONSTANT VARCHAR2(40) := ' ' || LPAD('-', 30, '-');
 
   CURSOR TB_UK(P_TABLENAME VARCHAR2) IS
@@ -595,10 +591,6 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
                            ) RETURN CLOB IS
     LV_RESULT CLOB; --VARCHAR2(128);
   BEGIN
-    /*
-        LV_RESULT := UPPER(MAM_REMOVE_VOWELS_FUN(PREFIX || INFIX || POSTFIX
-                                                ,30 - LENGTH(PREFIX || POSTFIX)));
-    */
     LV_RESULT := UPPER(MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(PREFIX ||
                                                                 INFIX ||
                                                                 POSTFIX
@@ -680,19 +672,20 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     RETURN CREATE_FPV_NAME('LV_', COLUMN_NAME, NULL);
   END;
 
-  FUNCTION CREATE_FLTR_PACKAGE_NAME( --
-                                    TABLE_NAME VARCHAR2 --
-                                    ) RETURN CLOB IS
+  FUNCTION CREATE_PACKAGE_NAME( --
+                               P_PREFIX  VARCHAR2
+                              ,P_INFIX   VARCHAR2
+                              ,P_POSTFIX VARCHAR2
+                               --
+                               ) RETURN CLOB IS
     LV_RESULT VARCHAR2(128);
-    C_PREFIX  CONSTANT VARCHAR2(10) := NULL;
-    C_POSTFIX CONSTANT VARCHAR2(10) := '_FLTR_PKG';
   BEGIN
-    LV_RESULT := UPPER(C_PREFIX ||
-                       MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(TABLE_NAME
+    LV_RESULT := UPPER(P_PREFIX ||
+                       MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(P_INFIX
                                                                ,30 -
-                                                                (LENGTH(C_PREFIX ||
-                                                                        C_POSTFIX))) ||
-                       C_POSTFIX);
+                                                                (LENGTH(P_PREFIX ||
+                                                                        P_POSTFIX))) ||
+                       P_POSTFIX);
     IF LENGTH(LV_RESULT) > 30
     THEN
       LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(LV_RESULT
@@ -704,10 +697,9 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
                                                                   ,30);
     END IF;
     RETURN LV_RESULT;
-  
   END;
   FUNCTION CREATE_FLTR_PACKAGE_DECLARATN( --
-                                         TABLE_NAME   VARCHAR2
+                                         P_TABLENAME  VARCHAR2
                                         ,SPEC_OR_BODY VARCHAR2
                                          --
                                          ) RETURN CLOB IS
@@ -716,41 +708,30 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     IF UPPER(TRIM(NVL(SPEC_OR_BODY, 'spec'))) = UPPER(TRIM('spec'))
     THEN
       LV_RESULT := 'CREATE PACKAGE ' ||
-                   CREATE_FLTR_PACKAGE_NAME(TABLE_NAME) || ' IS';
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_FLTR_PKG'
+                                       --
+                                       )
+                  --                    CREATE_FLTR_PACKAGE_NAME(P_TABLENAME) 
+                   || ' IS';
     ELSE
       LV_RESULT := 'CREATE PACKAGE body ' ||
-                   CREATE_FLTR_PACKAGE_NAME(TABLE_NAME) || ' IS';
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_FLTR_PKG'
+                                       --
+                                       )
+                  --                    CREATE_FLTR_PACKAGE_NAME(P_TABLENAME) 
+                  --
+                   || ' IS';
     END IF;
     RETURN UPPER(TRIM(LV_RESULT));
   END;
-  FUNCTION CREATE_FLD_PACKAGE_NAME( --
-                                   TABLE_NAME VARCHAR2 --
-                                   ) RETURN CLOB IS
-    LV_RESULT VARCHAR2(128);
-    C_PREFIX  CONSTANT VARCHAR2(10) := NULL;
-    C_POSTFIX CONSTANT VARCHAR2(10) := '_FLD_PKG';
-  BEGIN
-    LV_RESULT := UPPER(C_PREFIX ||
-                       MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(TABLE_NAME
-                                                               ,30 -
-                                                                (LENGTH(C_PREFIX ||
-                                                                        C_POSTFIX))) ||
-                       C_POSTFIX);
-    IF LENGTH(LV_RESULT) > 30
-    THEN
-      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(LV_RESULT
-                                                              ,30);
-    END IF;
-    IF LENGTH(LV_RESULT) > 30
-    THEN
-      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_UNDERLINES_FUN(LV_RESULT
-                                                                  ,30);
-    END IF;
-    RETURN LV_RESULT;
-  
-  END;
   FUNCTION CREATE_FLD_PACKAGE_DECLARATN( --
-                                        TABLE_NAME   VARCHAR2
+                                        P_TABLENAME  VARCHAR2
                                        ,SPEC_OR_BODY VARCHAR2
                                         --
                                         ) RETURN CLOB IS
@@ -758,42 +739,32 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
   BEGIN
     IF UPPER(TRIM(NVL(SPEC_OR_BODY, 'spec'))) = UPPER(TRIM('spec'))
     THEN
-      LV_RESULT := 'CREATE PACKAGE ' || CREATE_FLD_PACKAGE_NAME(TABLE_NAME) ||
-                   ' IS';
+      LV_RESULT := 'CREATE PACKAGE ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_FLD_PKG'
+                                       --
+                                       )
+                  --       CREATE_FLD_PACKAGE_NAME(P_TABLENAME) 
+                   || ' IS';
     ELSE
       LV_RESULT := 'CREATE PACKAGE body ' ||
-                   CREATE_FLD_PACKAGE_NAME(TABLE_NAME) || ' IS';
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_FLD_PKG'
+                                       --
+                                       )
+                  --                    CREATE_FLD_PACKAGE_NAME(P_TABLENAME)
+                  --
+                   || ' IS';
     END IF;
     RETURN UPPER(TRIM(LV_RESULT));
   END;
-  FUNCTION CREATE_CTRL_PACKAGE_NAME( --
-                                    TABLE_NAME VARCHAR2 --
-                                    ) RETURN CLOB IS
-    LV_RESULT VARCHAR2(128);
-    C_PREFIX  CONSTANT VARCHAR2(10) := NULL;
-    C_POSTFIX CONSTANT VARCHAR2(10) := '_CTRL_PKG';
-  BEGIN
-    LV_RESULT := UPPER(C_PREFIX ||
-                       MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(TABLE_NAME
-                                                               ,30 -
-                                                                (LENGTH(C_PREFIX ||
-                                                                        C_POSTFIX))) ||
-                       C_POSTFIX);
-    IF LENGTH(LV_RESULT) > 30
-    THEN
-      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(LV_RESULT
-                                                              ,30);
-    END IF;
-    IF LENGTH(LV_RESULT) > 30
-    THEN
-      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_UNDERLINES_FUN(LV_RESULT
-                                                                  ,30);
-    END IF;
-    RETURN LV_RESULT;
-  
-  END;
+
   FUNCTION CREATE_CTRL_PACKAGE_DECLARATN( --
-                                         TABLE_NAME   VARCHAR2
+                                         P_TABLENAME  VARCHAR2
                                         ,SPEC_OR_BODY VARCHAR2
                                          --
                                          ) RETURN CLOB IS
@@ -802,22 +773,36 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     IF UPPER(TRIM(NVL(SPEC_OR_BODY, 'spec'))) = UPPER(TRIM('spec'))
     THEN
       LV_RESULT := 'CREATE PACKAGE ' ||
-                   CREATE_CTRL_PACKAGE_NAME(TABLE_NAME) || ' IS';
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_CTRL_PKG'
+                                       --
+                                       )
+                  --                    CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                   || ' IS';
     ELSE
       LV_RESULT := 'CREATE PACKAGE body ' ||
-                   CREATE_CTRL_PACKAGE_NAME(TABLE_NAME) || ' IS';
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_CTRL_PKG'
+                                       --
+                                       )
+                  --                    CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                   || ' IS';
     END IF;
     RETURN UPPER(TRIM(LV_RESULT));
   END;
 
   FUNCTION MAKE_RANDOM_VIEW_NAME( --
-                                 TABLE_NAME VARCHAR2 --
+                                 P_TABLENAME VARCHAR2 --
                                  ) RETURN VARCHAR2 IS
     LV_RESULT VARCHAR2(200);
     LV_EXIT   NUMBER;
   BEGIN
     LOOP
-      LV_RESULT := UPPER(TRIM(SUBSTR(TABLE_NAME, 1, 4) ||
+      LV_RESULT := UPPER(TRIM(SUBSTR(P_TABLENAME, 1, 4) ||
                               SUBSTR(SYS_GUID(), 1, 30 - 8) || '_VIW'));
       SELECT CASE
                WHEN EXISTS (SELECT NULL
@@ -834,34 +819,8 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     RETURN LV_RESULT;
   END;
 
-  FUNCTION CREATE_APP_PACKAGE_NAME( --
-                                   TABLE_NAME VARCHAR2 --
-                                   ) RETURN VARCHAR2 IS
-    LV_RESULT VARCHAR2(128);
-    C_PREFIX  CONSTANT VARCHAR2(10) := NULL; --'APP_';
-    C_POSTFIX CONSTANT VARCHAR2(10) := '_APP_PKG';
-  BEGIN
-    LV_RESULT := UPPER(C_PREFIX ||
-                       MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(TABLE_NAME
-                                                               ,30 -
-                                                                (LENGTH(C_PREFIX ||
-                                                                        C_POSTFIX))) ||
-                       C_POSTFIX);
-    IF LENGTH(LV_RESULT) > 30
-    THEN
-      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(LV_RESULT
-                                                              ,30);
-    END IF;
-    IF LENGTH(LV_RESULT) > 30
-    THEN
-      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_UNDERLINES_FUN(LV_RESULT
-                                                                  ,30);
-    END IF;
-    RETURN LV_RESULT;
-  
-  END;
   FUNCTION CREATE_APP_PACKAGE_DECLARATION( --
-                                          TABLE_NAME   VARCHAR2
+                                          P_TABLENAME  VARCHAR2
                                          ,SPEC_OR_BODY VARCHAR2
                                           --
                                           ) RETURN CLOB IS
@@ -869,11 +828,25 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
   BEGIN
     IF UPPER(TRIM(NVL(SPEC_OR_BODY, 'spec'))) = UPPER(TRIM('spec'))
     THEN
-      LV_RESULT := 'CREATE PACKAGE ' || CREATE_APP_PACKAGE_NAME(TABLE_NAME) ||
-                   ' IS';
+      LV_RESULT := 'CREATE PACKAGE ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_APP_PKG'
+                                       --
+                                       )
+                  --       CREATE_APP_PACKAGE_NAME(P_TABLENAME) 
+                   || ' IS';
     ELSE
       LV_RESULT := 'CREATE PACKAGE body ' ||
-                   CREATE_APP_PACKAGE_NAME(TABLE_NAME) || ' IS';
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_APP_PKG'
+                                       --
+                                       )
+                  --                    CREATE_APP_PACKAGE_NAME(P_TABLENAME)
+                   || ' IS';
     END IF;
     RETURN UPPER(TRIM(LV_RESULT));
   END;
@@ -2238,8 +2211,14 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
   
     LV_RESULT := LV_RESULT || CHR(10) ||
                  'if lv_result is null then LV_RESULT:=' ||
-                 CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) ||
-                 '.CHECK_B4_EDIT_NO_LOCK(';
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                 || '.CHECK_B4_EDIT_NO_LOCK(';
     -- <parameters to check
     DELIMITTER := '';
     I          := 1;
@@ -2306,8 +2285,14 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
   
     LV_RESULT := LV_RESULT || CHR(10) ||
                  ' if lv_result is null then lv_result := ' ||
-                 CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) ||
-                 '.check_b4_remove_NO_LOCK(';
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                 || '.check_b4_remove_NO_LOCK(';
     -- <CHECK_LOCK parameters
     DELIMITTER := '';
     I          := 1;
@@ -2680,7 +2665,14 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     LV_RESULT := LV_RESULT || CHR(10) || ');';
   
     LV_RESULT := LV_RESULT || 'if LV_RESULT is null then lv_result:=' ||
-                 CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) || '.initiator(--';
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME)
+                 || '.initiator(--';
     -- <parameters to initiator
     DELIMITTER := '';
     I          := 1;
@@ -2698,8 +2690,14 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
                  ');end if; if LV_RESULT is null then';
   
     LV_RESULT := LV_RESULT || CHR(10) || 'LV_RESULT:=';
-    LV_RESULT := LV_RESULT || CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) ||
-                 '.CHECK_B4_ADD(--';
+    LV_RESULT := LV_RESULT || CREATE_PACKAGE_NAME( --
+                                                  P_PREFIX  => NULL
+                                                 ,P_INFIX   => P_TABLENAME
+                                                 ,P_POSTFIX => '_CTRL_PKG'
+                                                  --
+                                                  )
+                --     CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                 || '.CHECK_B4_ADD(--';
     -- <parameters to check
     DELIMITTER := '';
     I          := 1;
@@ -2814,8 +2812,14 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
                  CHR(10) || 'begin';
     LV_RESULT := LV_RESULT || CHR(10) ||
                  ' if lv_result is null then lv_result := ' ||
-                 CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) ||
-                 '.check_b4_remove(';
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                 || '.check_b4_remove(';
     -- <CHECK_LOCK parameters
     DELIMITTER := '';
     I          := 1;
@@ -2918,7 +2922,14 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     LV_RESULT := LV_RESULT || CHR(10) || ');';
   
     LV_RESULT := LV_RESULT || 'if lv_result is null then lv_result:=' ||
-                 CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) || '.retriever(--';
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME)
+                 || '.retriever(--';
     -- <parameters to initiator
     DELIMITTER := '';
     I          := 1;
@@ -2950,8 +2961,14 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
   
     LV_RESULT := LV_RESULT ||
                  'end if; if lv_result is null then lv_result:=' ||
-                 CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) ||
-                 '.post_retriever(--';
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                 || '.post_retriever(--';
     -- <parameters to initiator
     DELIMITTER := '';
     I          := 1;
@@ -2972,7 +2989,14 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
   
     LV_RESULT := LV_RESULT || CHR(10) ||
                  'if lv_result is null then LV_RESULT:=' ||
-                 CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) || '.CHECK_B4_EDIT(';
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                 || '.CHECK_B4_EDIT(';
     -- <parameters to check
     DELIMITTER := '';
     I          := 1;
@@ -3421,10 +3445,15 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     IF LV_RESULT IS NULL
     THEN
       BEGIN
-        LV_FLTR_PACKAGE_NAME := UPPER(TRIM(CREATE_FLTR_PACKAGE_NAME( --
-                                                                    P_TABLENAME
-                                                                    --
-                                                                    )));
+        LV_FLTR_PACKAGE_NAME := UPPER(TRIM( --
+                                           CREATE_PACKAGE_NAME( --
+                                                               P_PREFIX  => NULL
+                                                              ,P_INFIX   => P_TABLENAME
+                                                              ,P_POSTFIX => '_FLTR_PKG'
+                                                               --
+                                                               )
+                                           --         CREATE_FLTR_PACKAGE_NAME( P_TABLENAME)
+                                           ));
         SELECT '{' || LV_FLTR_PACKAGE_NAME || ' از قبل وجود دارد}'
           INTO LV_RESULT
           FROM DUAL
@@ -3502,10 +3531,14 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     IF LV_RESULT IS NULL
     THEN
       BEGIN
-        LV_FLD_PACKAGE_NAME := UPPER(TRIM(CREATE_FLD_PACKAGE_NAME( --
-                                                                  P_TABLENAME
-                                                                  --
-                                                                  )));
+        LV_FLD_PACKAGE_NAME := UPPER(TRIM(CREATE_PACKAGE_NAME( --
+                                                              P_PREFIX  => NULL
+                                                             ,P_INFIX   => P_TABLENAME
+                                                             ,P_POSTFIX => '_FLD_PKG'
+                                                              --
+                                                              )
+                                          --         CREATE_FLD_PACKAGE_NAME(P_TABLENAME)
+                                          ));
         SELECT '{' || LV_FLD_PACKAGE_NAME || ' از قبل وجود دارد}'
           INTO LV_RESULT
           FROM DUAL
@@ -3573,10 +3606,14 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     IF LV_RESULT IS NULL
     THEN
       BEGIN
-        LV_CTRL_PACKAGE_NAME := UPPER(TRIM(CREATE_CTRL_PACKAGE_NAME( --
-                                                                    P_TABLENAME
-                                                                    --
-                                                                    )));
+        LV_CTRL_PACKAGE_NAME := UPPER(TRIM(CREATE_PACKAGE_NAME( --
+                                                               P_PREFIX  => NULL
+                                                              ,P_INFIX   => P_TABLENAME
+                                                              ,P_POSTFIX => '_CTRL_PKG'
+                                                               --
+                                                               )
+                                           --         CREATE_CTRL_PACKAGE_NAME(P_TABLENAME)
+                                           ));
         SELECT '{' || LV_CTRL_PACKAGE_NAME || ' از قبل وجود دارد}'
           INTO LV_RESULT
           FROM DUAL
@@ -3704,10 +3741,14 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
     IF LV_RESULT IS NULL
     THEN
       BEGIN
-        LV_APP_PACKAGE_NAME := UPPER(TRIM(CREATE_APP_PACKAGE_NAME( --
-                                                                  P_TABLENAME
-                                                                  --
-                                                                  )));
+        LV_APP_PACKAGE_NAME := UPPER(TRIM(CREATE_PACKAGE_NAME( --
+                                                              P_PREFIX  => NULL
+                                                             ,P_INFIX   => P_TABLENAME
+                                                             ,P_POSTFIX => '_APP_PKG'
+                                                              --
+                                                              )
+                                          --         CREATE_APP_PACKAGE_NAME(P_TABLENAME)
+                                          ));
         SELECT '{' || LV_APP_PACKAGE_NAME || ' از قبل وجود دارد}'
           INTO LV_RESULT
           FROM DUAL
@@ -3880,5 +3921,7 @@ CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
   
     RETURN LV_RESULT;
   END;
+BEGIN
+  NULL;
 END;
 /

@@ -1,0 +1,49 @@
+SELECT OBJECT_NAME
+  FROM ( --
+        SELECT O.OBJECT_NAME
+          FROM ALL_OBJECTS O
+         WHERE O.OBJECT_NAME LIKE UPPER('%MAM%')
+               AND O.OBJECT_NAME NOT LIKE UPPER('MAM%')
+               AND O.OBJECT_NAME NOT LIKE UPPER('BRL_MAM%')
+               AND O.OBJECT_NAME NOT LIKE UPPER('APP_MAM%')
+               AND O.OBJECT_NAME NOT LIKE UPPER('FRM_FMAM%')
+               AND O.OBJECT_NAME NOT LIKE UPPER('FRM_RMAM%')
+               AND O.OBJECT_NAME NOT LIKE UPPER('FRM_MAM%')
+               AND O.OWNER != UPPER('MAM')
+        UNION
+        
+        SELECT DISTINCT S.NAME AS OBJECT_NAME
+          FROM ALL_SOURCE S
+         WHERE S.TEXT LIKE UPPER('%MAM%')
+               AND S.NAME NOT LIKE UPPER('MAM%')
+               AND S.NAME NOT LIKE UPPER('BRL_MAM%')
+               AND S.NAME NOT LIKE UPPER('APP_MAM%')
+               AND S.NAME NOT LIKE UPPER('FRM_FMAM%')
+               AND S.NAME NOT LIKE UPPER('FRM_RMAM%')
+               AND S.NAME NOT LIKE UPPER('FRM_MAM%')
+        --
+        )
+ ORDER BY OBJECT_NAME
+;
+/*
+DECLARE
+  LV_ADDITIVE VARCHAR2(1000);
+BEGIN
+  DBMS_OUTPUT.PUT_LINE('SELECT * FROM ALL_OBJECTS O WHERE O.OBJECT_NAME LIKE UPPER(''%MAM%'') AND (--');
+  LV_ADDITIVE := NULL;
+  FOR C IN ( --
+            SELECT '''' || A.NAM_APP_SHORT_APPLS || '%''' AS A
+              FROM FND_APPLICATION_SYSTEMS A
+             WHERE UPPER(A.NAM_APP_SHORT_APPLS) != UPPER('mam')
+             ORDER BY 1
+            --
+            )
+  LOOP
+    DBMS_OUTPUT.PUT_LINE(LV_ADDITIVE || 'O.OBJECT_NAME LIKE ' || C.A ||
+                         ' --');
+    LV_ADDITIVE := ' OR ';
+  END LOOP;
+  DBMS_OUTPUT.PUT_LINE('--');
+  DBMS_OUTPUT.PUT_LINE(')');
+END;
+*/

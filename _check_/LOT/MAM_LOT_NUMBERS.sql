@@ -1,3 +1,4 @@
+-------nillllllll
 SELECT L.LOT_NUMBER_ID
       ,L.COD_LOT_MLOT
       ,L.FLG_DISABLE_MLOT

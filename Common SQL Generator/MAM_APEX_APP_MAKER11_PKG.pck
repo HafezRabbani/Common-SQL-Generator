@@ -1,0 +1,5232 @@
+﻿CREATE OR REPLACE PACKAGE MAM_APEX_APP_MAKER_PKG IS
+  --
+  -- FUNCTION CREATE_APP_PACKAGE_NAME(TABLE_NAME VARCHAR2) RETURN VARCHAR2;
+  FUNCTION CREATE_CHECK_LKP_DCL(P_TABLENAME VARCHAR2) RETURN CLOB;
+  FUNCTION CREATE_CHECK_LKP_BDY(P_TABLENAME VARCHAR2) RETURN CLOB;
+  FUNCTION CREATE_CHECK_LKP_IMPL(P_TABLENAME VARCHAR2) RETURN CLOB;
+  FUNCTION CREATE_CHECK_MUST_FILLS_DCL(P_TABLENAME VARCHAR2) RETURN CLOB;
+  FUNCTION CREATE_CHECK_MUST_FILLS_BDY(P_TABLENAME VARCHAR2) RETURN CLOB;
+  FUNCTION CREATE_CHECK_MUST_FILLS_IMPL(P_TABLENAME VARCHAR2) RETURN CLOB;
+  -- CREATE_UPDATE_ATTACH_ID_DCL ------------------------------------------------------------------------------------------------
+  FUNCTION CREATE_UPDATE_ATTACH_ID_DCL(P_TABLENAME VARCHAR2) RETURN CLOB;
+  -- CREATE_UPDATE_ATTACH_ID_BODY ------------------------------------------------------------------------------------------------
+  FUNCTION CREATE_UPDATE_ATTACH_ID_BODY(P_TABLENAME VARCHAR2) RETURN CLOB;
+  /**********************************************************************************/
+  FUNCTION MAKE_FLTR_PACKAGE( --
+                             P_TABLENAME      VARCHAR2
+                            ,PACKAGES_CREATED OUT VARCHAR2
+                             --
+                             ) RETURN VARCHAR2;
+  /**********************************************************************************/
+  FUNCTION MAKE_FLD_PACKAGE( --
+                            P_TABLENAME      VARCHAR2
+                           ,PACKAGES_CREATED OUT VARCHAR2
+                            --
+                            ) RETURN VARCHAR2;
+  /**********************************************************************************/
+  FUNCTION MAKE_CTRL_PACKAGE( --
+                             P_TABLENAME      VARCHAR2
+                            ,PACKAGES_CREATED OUT VARCHAR2
+                             --
+                             ) RETURN VARCHAR2;
+  /**********************************************************************************/
+  FUNCTION MAKE_APP_PACKAGE( --
+                            P_TABLENAME      VARCHAR2
+                           ,PACKAGES_CREATED OUT VARCHAR2
+                            --
+                            ) RETURN VARCHAR2;
+  /**********************************************************************************/
+  FUNCTION MAKE_MTC_PACKAGE( --
+                            P_TABLENAME      VARCHAR2
+                           ,PACKAGES_CREATED OUT VARCHAR2
+                            --
+                            ) RETURN VARCHAR2;
+  /**********************************************************************************/
+  FUNCTION MAKE_MT_PACKAGE( --
+                           P_TABLENAME      VARCHAR2
+                          ,PACKAGES_CREATED OUT VARCHAR2
+                           --
+                           ) RETURN VARCHAR2;
+  /**********************************************************************************/
+  FUNCTION MAKE_WRP_PACKAGE( --
+                            P_TABLENAME      VARCHAR2
+                           ,PACKAGES_CREATED OUT VARCHAR2
+                            --
+                            ) RETURN VARCHAR2;
+  /**********************************************************************************/
+  FUNCTION MAKE( --
+                P_TABLENAME         VARCHAR2
+               ,PACKAGES_CREATED    OUT VARCHAR2
+               ,CREATE_FLTR_PACKAGE NUMBER DEFAULT 1
+               ,CREATE_FLD_PACKAGE  NUMBER DEFAULT 1
+               ,CREATE_CTRL_PACKAGE NUMBER DEFAULT 1
+               ,CREATE_MTC_PACKAGE  NUMBER DEFAULT 1
+               ,CREATE_MT_PACKAGE   NUMBER DEFAULT 1
+               ,CREATE_APP_PACKAGE  NUMBER DEFAULT 1
+               ,CREATE_WRP_PACKAGE  NUMBER DEFAULT 1
+                --
+                ) RETURN VARCHAR2;
+
+  /**********************************************************************************/
+  FUNCTION INJECT_ROUTINE( --
+                          P_PACKAGE_NAME VARCHAR2
+                         ,P_ROUTINE_NAME VARCHAR2
+                         ,P_SQL_SPEC     CLOB
+                         ,P_SQL_BODY     CLOB
+                          --
+                          ) RETURN VARCHAR2;
+  /**********************************************************************************/
+  FUNCTION INJECT_2APP_PKG( --
+                           P_TABLENAME        VARCHAR2
+                          ,P_ROUTINE_NAME     VARCHAR2
+                          ,P_SQL_SPEC         CLOB
+                          ,P_SQL_BODY         CLOB
+                          ,P_APP_PACKAGE_NAME OUT VARCHAR2
+                           --
+                           ) RETURN VARCHAR2;
+  /**********************************************************************************/
+  FUNCTION INJECT_GET_DESCRIPTION2CTRLPKG( --
+                                          P_TABLENAME         VARCHAR2
+                                         ,P_CTRL_PACKAGE_NAME OUT VARCHAR2
+                                          --
+                                          ) RETURN VARCHAR2;
+END;
+/
+CREATE OR REPLACE PACKAGE BODY MAM_APEX_APP_MAKER_PKG IS
+  C_IS_NOT_PK    CONSTANT NUMBER := 0;
+  CV_BEAUTY_DASH CONSTANT VARCHAR2(40) := ' ' || LPAD('-', 30, '-');
+
+  CURSOR TB_UK(P_TABLENAME VARCHAR2) IS
+    SELECT UK.CONSTRAINT_NAME
+          ,UK.CONSTRAINT_COUNT
+          ,( --
+            SELECT COUNT(1) AS PK_COUNT
+              FROM ALL_CONSTRAINTS C
+             INNER JOIN ALL_CONS_COLUMNS CC
+                ON C.CONSTRAINT_NAME = CC.CONSTRAINT_NAME
+               AND C.TABLE_NAME = CC.TABLE_NAME
+             WHERE 1 = 1
+               AND C.CONSTRAINT_TYPE = UPPER('p')
+               AND C.TABLE_NAME = UPPER(TRIM(P_TABLENAME))
+             GROUP BY CC.CONSTRAINT_NAME
+            
+            --
+            ) AS PK_COUNT
+      FROM ( --
+            SELECT CC.CONSTRAINT_NAME, COUNT(1) AS CONSTRAINT_COUNT
+              FROM ALL_CONSTRAINTS C
+             INNER JOIN ALL_CONS_COLUMNS CC
+                ON C.CONSTRAINT_NAME = CC.CONSTRAINT_NAME
+               AND C.TABLE_NAME = CC.TABLE_NAME
+             WHERE 1 = 1
+               AND C.CONSTRAINT_TYPE = UPPER('U')
+               AND C.TABLE_NAME = UPPER(TRIM(P_TABLENAME))
+             GROUP BY CC.CONSTRAINT_NAME
+            --
+            ) UK
+     ORDER BY UK.CONSTRAINT_NAME;
+
+  CURSOR UK_COLUMNS
+  (
+    P_TABLENAME       VARCHAR2
+   ,P_CONSTRAINT_NAME VARCHAR2
+  ) IS
+    WITH UK_TABLE AS
+     ( --
+      SELECT DISTINCT TC.COLUMN_ID
+                      ,TC.TABLE_NAME
+                      ,TC.COLUMN_NAME
+                      ,CASE
+                         WHEN TC.DATA_TYPE IN ('NUMBER', 'DATE')
+                              AND CC.TABLE_NAME IS NULL THEN
+                          1
+                         ELSE
+                          0
+                       END AS SUBJECT_OF_FROM_TO
+                      ,NVL(UK.IS_PK, 0) AS IS_PK
+                      ,TC.DATA_TYPE
+                      ,NULL AS IDENTITY_COLUMN
+                      ,UK.CONSTRAINT_NAME
+                      ,UK.POSITION
+        FROM ALL_TAB_COLUMNS TC
+       INNER JOIN ( --
+                   SELECT TO_NUMBER(CASE
+                                       WHEN C.CONSTRAINT_TYPE = UPPER('P') THEN
+                                        1
+                                       ELSE
+                                        0
+                                     END) AS IS_PK
+                          ,C.TABLE_NAME
+                          ,CC.COLUMN_NAME
+                          ,CC.CONSTRAINT_NAME
+                          ,CC.POSITION
+                     FROM ALL_CONSTRAINTS C
+                    INNER JOIN ALL_CONS_COLUMNS CC
+                       ON C.CONSTRAINT_NAME = CC.CONSTRAINT_NAME
+                      AND C.TABLE_NAME = CC.TABLE_NAME
+                    WHERE C.CONSTRAINT_TYPE = UPPER('U')
+                   --
+                   ) UK
+          ON TC.TABLE_NAME = UK.TABLE_NAME
+         AND TC.COLUMN_NAME = UK.COLUMN_NAME
+        LEFT OUTER JOIN (SELECT DISTINCT ACC.TABLE_NAME, ACC.COLUMN_NAME
+                           FROM ALL_CONSTRAINTS AC
+                          INNER JOIN ALL_CONS_COLUMNS ACC
+                             ON AC.CONSTRAINT_NAME = ACC.CONSTRAINT_NAME
+                            AND AC.TABLE_NAME = ACC.TABLE_NAME
+                          WHERE AC.CONSTRAINT_TYPE = UPPER('R')) CC
+          ON TC.TABLE_NAME = CC.TABLE_NAME
+         AND TC.COLUMN_NAME = CC.COLUMN_NAME
+       WHERE UPPER(TC.TABLE_NAME) = UPPER(TRIM(P_TABLENAME))
+      --
+      )
+    SELECT T.*, SUM(IS_PK) OVER (PARTITION BY NULL) AS PK_COUNT
+      FROM UK_TABLE T
+     WHERE (T.CONSTRAINT_NAME = P_CONSTRAINT_NAME)
+     ORDER BY T.CONSTRAINT_NAME, T.COLUMN_ID;
+
+  CURSOR PK_COLUMNS(P_TABLENAME VARCHAR2) IS
+    WITH CURSOR_TABLE AS
+     ( --
+      SELECT DISTINCT TC.COLUMN_ID
+                      ,TC.TABLE_NAME
+                      ,TC.COLUMN_NAME
+                      ,CASE
+                         WHEN TC.DATA_TYPE IN ('NUMBER', 'DATE')
+                              AND CC.TABLE_NAME IS NULL THEN
+                          1
+                         ELSE
+                          0
+                       END AS SUBJECT_OF_FROM_TO
+                      ,NVL(PK.IS_PK, 0) AS IS_PK
+                      ,TC.DATA_TYPE
+                      ,NULL AS IDENTITY_COLUMN
+        FROM ALL_TAB_COLUMNS TC
+        LEFT OUTER JOIN ( --
+                         SELECT TO_NUMBER(CASE
+                                             WHEN C.CONSTRAINT_TYPE = UPPER('P') THEN
+                                              1
+                                             ELSE
+                                              0
+                                           END) AS IS_PK
+                                ,C.TABLE_NAME
+                                ,CC.COLUMN_NAME
+                           FROM ALL_CONSTRAINTS C
+                          INNER JOIN ALL_CONS_COLUMNS CC
+                             ON C.CONSTRAINT_NAME = CC.CONSTRAINT_NAME
+                            AND C.TABLE_NAME = CC.TABLE_NAME
+                          WHERE C.CONSTRAINT_TYPE = UPPER('P')
+                         --
+                         ) PK
+          ON TC.TABLE_NAME = PK.TABLE_NAME
+         AND TC.COLUMN_NAME = PK.COLUMN_NAME
+        LEFT OUTER JOIN (SELECT DISTINCT ACC.TABLE_NAME, ACC.COLUMN_NAME
+                           FROM ALL_CONSTRAINTS AC
+                          INNER JOIN ALL_CONS_COLUMNS ACC
+                             ON AC.CONSTRAINT_NAME = ACC.CONSTRAINT_NAME
+                            AND AC.TABLE_NAME = ACC.TABLE_NAME
+                          WHERE AC.CONSTRAINT_TYPE = UPPER('R')) CC
+          ON TC.TABLE_NAME = CC.TABLE_NAME
+         AND TC.COLUMN_NAME = CC.COLUMN_NAME
+       WHERE UPPER(TC.TABLE_NAME) = UPPER(TRIM(P_TABLENAME))
+         AND (NVL(PK.IS_PK, 0) = 1)
+      --
+      )
+    SELECT T1.*, COUNT(1) OVER (PARTITION BY NULL) AS PK_COUNT
+      FROM CURSOR_TABLE T1
+     ORDER BY T1.COLUMN_ID;
+
+  CURSOR TABLE_COLUMNS_FLD
+  (
+    P_TABLENAME VARCHAR2
+   ,P_IS_PK     NUMBER
+  ) IS
+    WITH CURSOR_TABLE AS
+     ( --
+      SELECT DISTINCT TC.COLUMN_ID
+                      ,TC.TABLE_NAME
+                      ,TC.COLUMN_NAME
+                      ,CASE
+                         WHEN TC.DATA_TYPE IN ('NUMBER', 'DATE')
+                              AND CC.TABLE_NAME IS NULL THEN
+                          1
+                         ELSE
+                          0
+                       END AS SUBJECT_OF_FROM_TO
+                      ,NVL(PK.IS_PK, 0) AS IS_PK
+                      ,TC.DATA_TYPE
+                      ,NULL AS IDENTITY_COLUMN
+                      ,TC.NULLABLE
+      
+        FROM ALL_TAB_COLUMNS TC
+        LEFT OUTER JOIN ( --
+                         SELECT TO_NUMBER(CASE
+                                             WHEN C.CONSTRAINT_TYPE = UPPER('P') THEN
+                                              1
+                                             ELSE
+                                              0
+                                           END) AS IS_PK
+                                ,C.TABLE_NAME
+                                ,CC.COLUMN_NAME
+                           FROM ALL_CONSTRAINTS C
+                          INNER JOIN ALL_CONS_COLUMNS CC
+                             ON C.CONSTRAINT_NAME = CC.CONSTRAINT_NAME
+                            AND C.TABLE_NAME = CC.TABLE_NAME
+                          WHERE C.CONSTRAINT_TYPE = UPPER('P')
+                         --
+                         ) PK
+          ON TC.TABLE_NAME = PK.TABLE_NAME
+         AND TC.COLUMN_NAME = PK.COLUMN_NAME
+        LEFT OUTER JOIN (SELECT DISTINCT ACC.TABLE_NAME, ACC.COLUMN_NAME
+                           FROM ALL_CONSTRAINTS AC
+                          INNER JOIN ALL_CONS_COLUMNS ACC
+                             ON AC.CONSTRAINT_NAME = ACC.CONSTRAINT_NAME
+                            AND AC.TABLE_NAME = ACC.TABLE_NAME
+                          WHERE AC.CONSTRAINT_TYPE = UPPER('R')) CC
+          ON TC.TABLE_NAME = CC.TABLE_NAME
+         AND TC.COLUMN_NAME = CC.COLUMN_NAME
+       WHERE UPPER(TC.TABLE_NAME) = UPPER(TRIM(P_TABLENAME))
+      --
+      )
+    SELECT T.*, SUM(IS_PK) OVER (PARTITION BY NULL) AS PK_COUNT
+      FROM CURSOR_TABLE T
+     WHERE (P_IS_PK IS NULL OR T.IS_PK = NVL(P_IS_PK, 0))
+     ORDER BY T.IS_PK DESC, T.COLUMN_ID;
+
+  CURSOR TABLE_COLUMNS_MT
+  (
+    P_TABLENAME VARCHAR2
+   ,P_IS_PK     NUMBER
+  ) IS
+    WITH CURSOR_TABLE AS
+     ( --
+      SELECT DISTINCT TC.COLUMN_ID
+                      ,TC.TABLE_NAME
+                      ,TC.COLUMN_NAME
+                      ,NVL(PK.IS_PK, 0) AS IS_PK
+                      ,TC.DATA_TYPE
+                      ,NULL AS IDENTITY_COLUMN
+                      ,TC.NULLABLE
+      
+        FROM ALL_TAB_COLUMNS TC
+        LEFT OUTER JOIN ( --
+                         SELECT TO_NUMBER(CASE
+                                             WHEN C.CONSTRAINT_TYPE = UPPER('P') THEN
+                                              1
+                                             ELSE
+                                              0
+                                           END) AS IS_PK
+                                ,C.TABLE_NAME
+                                ,CC.COLUMN_NAME
+                           FROM ALL_CONSTRAINTS C
+                          INNER JOIN ALL_CONS_COLUMNS CC
+                             ON C.CONSTRAINT_NAME = CC.CONSTRAINT_NAME
+                            AND C.TABLE_NAME = CC.TABLE_NAME
+                          WHERE C.CONSTRAINT_TYPE = UPPER('P')
+                         --
+                         ) PK
+          ON TC.TABLE_NAME = PK.TABLE_NAME
+         AND TC.COLUMN_NAME = PK.COLUMN_NAME
+        LEFT OUTER JOIN (SELECT DISTINCT ACC.TABLE_NAME, ACC.COLUMN_NAME
+                           FROM ALL_CONSTRAINTS AC
+                          INNER JOIN ALL_CONS_COLUMNS ACC
+                             ON AC.CONSTRAINT_NAME = ACC.CONSTRAINT_NAME
+                            AND AC.TABLE_NAME = ACC.TABLE_NAME
+                          WHERE AC.CONSTRAINT_TYPE = UPPER('R')) CC
+          ON TC.TABLE_NAME = CC.TABLE_NAME
+         AND TC.COLUMN_NAME = CC.COLUMN_NAME
+       WHERE UPPER(TC.TABLE_NAME) = UPPER(TRIM(P_TABLENAME))
+         AND TC.COLUMN_NAME NOT IN ( --
+                                    
+                                    SELECT UPPER(COL___1)
+                                      FROM ( --
+                                             SELECT 'CREATE_DATE' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'CREATE_BY_DB_USER' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'CREATE_BY_APP_USER' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'LAST_UPDATE_DATE' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'LAST_UPDATE_BY_DB_USER' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'LAST_UPDATE_BY_APP_USER' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'LAST_CHANGE_TS' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'MODULE_NAME' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'OS_USERNAME' AS COL___1
+                                               FROM DUAL
+                                             --
+                                             )
+                                     WHERE COL___1 IS NOT NULL
+                                    --
+                                    ) --
+      )
+    
+    SELECT T.*, SUM(IS_PK) OVER (PARTITION BY NULL) AS PK_COUNT
+      FROM CURSOR_TABLE T
+     WHERE (P_IS_PK IS NULL OR T.IS_PK = NVL(P_IS_PK, 0))
+     ORDER BY T.IS_PK DESC, T.COLUMN_ID;
+  CURSOR TABLE_COLUMNS
+  (
+    P_TABLENAME VARCHAR2
+   ,P_IS_PK     NUMBER
+  ) IS
+    WITH CURSOR_TABLE AS
+     ( --
+      SELECT DISTINCT TC.COLUMN_ID
+                      ,TC.TABLE_NAME
+                      ,TC.COLUMN_NAME
+                      ,CASE
+                         WHEN TC.DATA_TYPE IN ('NUMBER', 'DATE')
+                              AND CC.TABLE_NAME IS NULL THEN
+                          1
+                         ELSE
+                          0
+                       END AS SUBJECT_OF_FROM_TO
+                      ,NVL(PK.IS_PK, 0) AS IS_PK
+                      ,TC.DATA_TYPE
+                      ,NULL AS IDENTITY_COLUMN
+                      ,TC.NULLABLE
+      
+        FROM ALL_TAB_COLUMNS TC
+        LEFT OUTER JOIN ( --
+                         SELECT TO_NUMBER(CASE
+                                             WHEN C.CONSTRAINT_TYPE = UPPER('P') THEN
+                                              1
+                                             ELSE
+                                              0
+                                           END) AS IS_PK
+                                ,C.TABLE_NAME
+                                ,CC.COLUMN_NAME
+                           FROM ALL_CONSTRAINTS C
+                          INNER JOIN ALL_CONS_COLUMNS CC
+                             ON C.CONSTRAINT_NAME = CC.CONSTRAINT_NAME
+                            AND C.TABLE_NAME = CC.TABLE_NAME
+                          WHERE C.CONSTRAINT_TYPE = UPPER('P')
+                         --
+                         ) PK
+          ON TC.TABLE_NAME = PK.TABLE_NAME
+         AND TC.COLUMN_NAME = PK.COLUMN_NAME
+        LEFT OUTER JOIN (SELECT DISTINCT ACC.TABLE_NAME, ACC.COLUMN_NAME
+                           FROM ALL_CONSTRAINTS AC
+                          INNER JOIN ALL_CONS_COLUMNS ACC
+                             ON AC.CONSTRAINT_NAME = ACC.CONSTRAINT_NAME
+                            AND AC.TABLE_NAME = ACC.TABLE_NAME
+                          WHERE AC.CONSTRAINT_TYPE = UPPER('R')) CC
+          ON TC.TABLE_NAME = CC.TABLE_NAME
+         AND TC.COLUMN_NAME = CC.COLUMN_NAME
+       WHERE UPPER(TC.TABLE_NAME) = UPPER(TRIM(P_TABLENAME))
+         AND TC.COLUMN_NAME NOT IN ( --
+                                    
+                                    SELECT UPPER(COL___1)
+                                      FROM ( --
+                                             SELECT 'CREATE_DATE' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'CREATE_BY_DB_USER' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'CREATE_BY_APP_USER' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'LAST_UPDATE_DATE' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'LAST_UPDATE_BY_DB_USER' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'LAST_UPDATE_BY_APP_USER' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'ATTACH_ID' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'LAST_CHANGE_TS' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'MODULE_NAME' AS COL___1
+                                               FROM DUAL
+                                             UNION
+                                             SELECT 'OS_USERNAME' AS COL___1
+                                               FROM DUAL
+                                             --
+                                             )
+                                     WHERE COL___1 IS NOT NULL
+                                    --
+                                    )
+         AND ( --
+              UPPER(TRIM(P_TABLENAME)) != UPPER('MAM_MATERIAL_TRANSACTIONS') --
+              OR TC.COLUMN_NAME NOT IN ( --
+                                        
+                                        SELECT UPPER(COL___1)
+                                          FROM ( --
+                                                 SELECT 'AMN_ACTUAL_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'AMN_STIMATE_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'COD_COSTED_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'COD_REVISION_FOR_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'COD_REVISION_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'DAT_STL_INVOICE_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'COD_ORD_ORDHE_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'FLG_HAVE_BEFOR_INP_COST_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'FLG_SLC_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'FLG_WAC_OPN_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'ID_TRANSFER_LOCATOR_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'ITEM_ITEM_ID' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'LKP_COD_FCT_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'LKP_STA_PENDING_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'NAM_TRANSFER_SUBINVENTORY_MTRA' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'NUM_WAC_ACC_CONT_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'NUM_WAC_ACC_MAIN_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'ORDHE_COD_ORD_ORDHE' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'QTY_ONHAND_PREVIOUS_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'LKP_TYP_MTYPE_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'LKP_COD_TRANSACTION_ACTION_MTR' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'MSTP_SOURCE_TYPE_ID' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'ORPYD_ORPYM_NUM_ORD_PYM_ORPYM' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'ORPYD_NUM_SEQ_ORPYD' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'SPINV_NUM_SRL_SPINV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'MRES_RESERVATION_ID' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'CCNTR_COD_CC_CCNTR_FROM' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'SPINV_NUM_SRL_INNER_WAY' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'CCNTR_COD_CC_CCNTR_FROM' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'NAM_UNIT_OF_MEASURE_PRIMARY_MT' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'MSINV_NAM_SUB_INVENTORY_MSINV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'MSLOC_SUB_INVENTORY_LOCATOR_ID' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'NAM_TRANSFER_SUBINVNTRY_MTRA' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'DAT_WAC_MTRAN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT '' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT '' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT '' AS COL___1
+                                                   FROM DUAL
+                                                 --
+                                                 )
+                                         WHERE COL___1 IS NOT NULL
+                                        --
+                                        )
+              --
+              )
+         AND ( --
+              UPPER(TRIM(P_TABLENAME)) != UPPER('MAM_RCV_TRANSACTIONS') --
+              OR TC.COLUMN_NAME NOT IN ( --
+                                        
+                                        SELECT UPPER(COL___1)
+                                          FROM ( --
+                                                 SELECT 'COD_REVISION_MRCV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'QTY_BILLED_MRCV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'SPINV_NUM_SRL_SPINV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'AMN_ACTUAL_MRCV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'AMN_STIMATE_MRCV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'DAT_STL_MRCV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'LKP_COD_FCT_MRCV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'LKP_COD_SOURCE_DOCUMENT_MRCV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'NUM_RMA_REFERENCE_MRCV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'PCN_FALL_MRCV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'PCN_FALL_AMOUNT_MRCV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'BUSUN_COD_BUSUN' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'ORPYD_NUM_SEQ_ORPYD' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'ORPYDORPYM_NUM_ORD_PYM_ORPYM' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'LKP_STA_FIN_MRCV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'FLG_LAST_INVOICE_MRCV' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT 'SPINV_NUM_SRL_INNER_WAY' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT '' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT '' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT '' AS COL___1
+                                                   FROM DUAL
+                                                 UNION
+                                                 SELECT '' AS COL___1
+                                                   FROM DUAL
+                                                 --
+                                                 )
+                                         WHERE COL___1 IS NOT NULL
+                                        --
+                                        )
+              --
+              )
+      --
+      )
+    SELECT T.*, SUM(IS_PK) OVER (PARTITION BY NULL) AS PK_COUNT
+      FROM CURSOR_TABLE T
+     WHERE (P_IS_PK IS NULL OR T.IS_PK = NVL(P_IS_PK, 0))
+     ORDER BY T.IS_PK DESC, T.COLUMN_ID;
+
+  CURSOR TABLE_LKP_COLUMNS
+  (
+    P_TABLENAME VARCHAR2
+   ,P_IS_PK     NUMBER
+  ) IS
+    SELECT DISTINCT TC.COLUMN_ID
+                   ,TC.TABLE_NAME
+                   ,TC.COLUMN_NAME
+                   ,TC.DATA_TYPE
+                   ,NULL AS IDENTITY_COLUMN
+      FROM ALL_TAB_COLUMNS TC
+     WHERE UPPER(TC.TABLE_NAME) = UPPER(TRIM(P_TABLENAME))
+       AND UPPER(TC.COLUMN_NAME) LIKE UPPER('lkp%')
+       AND ( --
+            UPPER(TRIM(P_TABLENAME)) != UPPER('MAM_MATERIAL_TRANSACTIONS') --
+            OR TC.COLUMN_NAME NOT IN ( --
+                                      
+                                      SELECT UPPER(COL___1)
+                                        FROM ( --
+                                               SELECT 'LKP_COD_FCT_MTRAN' AS COL___1
+                                                 FROM DUAL
+                                               UNION
+                                               SELECT 'LKP_STA_PENDING_MTRAN' AS COL___1
+                                                 FROM DUAL
+                                               UNION
+                                               SELECT 'LKP_TYP_MTYPE_MTRAN' AS COL___1
+                                                 FROM DUAL
+                                               UNION
+                                               SELECT 'LKP_COD_TRANSACTION_ACTION_MTR' AS COL___1
+                                                 FROM DUAL
+                                               --
+                                               )
+                                       WHERE COL___1 IS NOT NULL
+                                      --
+                                      )
+            --
+            )
+       AND ( --
+            UPPER(TRIM(P_TABLENAME)) != UPPER('MAM_RCV_TRANSACTIONS') --
+            OR TC.COLUMN_NAME NOT IN ( --
+                                      SELECT UPPER(COL___1)
+                                        FROM ( --
+                                               SELECT 'LKP_COD_FCT_MRCV' AS COL___1
+                                                 FROM DUAL
+                                               UNION
+                                               SELECT 'LKP_COD_SOURCE_DOCUMENT_MRCV' AS COL___1
+                                                 FROM DUAL
+                                               UNION
+                                               SELECT 'LKP_STA_FIN_MRCV' AS COL___1
+                                                 FROM DUAL
+                                               --
+                                               )
+                                       WHERE COL___1 IS NOT NULL
+                                      --
+                                      )
+            --
+            )
+     ORDER BY TC.COLUMN_ID;
+
+  FUNCTION TABLE_COMMENT_FUN(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT VARCHAR2(1000);
+  BEGIN
+    BEGIN
+      SELECT REPLACE(REPLACE(REPLACE(TRIM(REPLACE(TC.COMMENTS
+                                                 ,'جدول'
+                                                 ,''))
+                                    ,'  '
+                                    ,' ')
+                            ,'  '
+                            ,' ')
+                    ,'  '
+                    ,' ')
+        INTO LV_RESULT
+        FROM ALL_TAB_COMMENTS TC
+       WHERE TC.TABLE_NAME = UPPER(TRIM(P_TABLENAME));
+    EXCEPTION
+      WHEN OTHERS THEN
+        NULL;
+    END;
+    LV_RESULT := 'جدول ' || NVL(LV_RESULT, UPPER(TRIM(P_TABLENAME)));
+    RETURN LV_RESULT;
+  END;
+  -- FIELD_COMMENT_FUN -------------------------------------------------------
+  FUNCTION FIELD_COMMENT_FUN( --
+                             P_TABLENAME   VARCHAR2
+                            ,P_COLUMN_NAME VARCHAR2
+                             --
+                             ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(1000);
+  BEGIN
+    BEGIN
+      SELECT CC.COMMENTS
+        INTO LV_RESULT
+        FROM ALL_COL_COMMENTS CC
+       WHERE CC.TABLE_NAME = UPPER(TRIM(P_TABLENAME))
+         AND CC.COLUMN_NAME = P_COLUMN_NAME
+      --
+      ;
+    EXCEPTION
+      WHEN OTHERS THEN
+        NULL;
+    END;
+    LV_RESULT := NVL(LV_RESULT, UPPER(TRIM(P_COLUMN_NAME)));
+    RETURN LV_RESULT;
+  END;
+
+  FUNCTION CREATE_COLUMN_TYPE_STRING( --
+                                     P_TABLENAME VARCHAR2
+                                    ,COLUMN_NAME VARCHAR2 --
+                                     ) RETURN CLOB IS
+  BEGIN
+    RETURN SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' || UPPER(TRIM(P_TABLENAME)) || '.' || COLUMN_NAME || '%TYPE';
+  END;
+  FUNCTION CREATE_COLUMN_TYPE( --
+                              P_TABLENAME VARCHAR2
+                             ,COLUMN_NAME VARCHAR2 --
+                              ) RETURN CLOB IS
+  BEGIN
+    RETURN CREATE_COLUMN_TYPE_STRING( --
+                                     P_TABLENAME
+                                    ,COLUMN_NAME --
+                                     );
+  END;
+  FUNCTION CREATE_PARAMETER_NAME( --
+                                 COLUMN_NAME VARCHAR2 --
+                                 ) RETURN CLOB IS
+  BEGIN
+    RETURN UPPER('P_' ||
+                 MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(COLUMN_NAME
+                                                            ,28));
+  END;
+  FUNCTION CREATE_ORIGINAL_PARAMETER_NAME( --
+                                          COLUMN_NAME VARCHAR2 --
+                                          ) RETURN CLOB IS
+  BEGIN
+    RETURN UPPER('OP_' ||
+                 MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(COLUMN_NAME
+                                                            ,27));
+  END;
+  FUNCTION CREATE_PARAMETER_TYPE( --
+                                 P_TABLENAME VARCHAR2
+                                ,COLUMN_NAME VARCHAR2 --
+                                 ) RETURN CLOB IS
+  BEGIN
+    RETURN CREATE_COLUMN_TYPE_STRING( --
+                                     P_TABLENAME
+                                    ,COLUMN_NAME --
+                                     );
+  END;
+  ---------------------------------------------------------
+  FUNCTION CREATE_FPV_NAME( --
+                           PREFIX  VARCHAR2
+                          ,INFIX   VARCHAR2
+                          ,POSTFIX VARCHAR2 --
+                           ) RETURN CLOB IS
+    LV_RESULT  VARCHAR2(256);
+    LV_PREFIX  VARCHAR2(256) := PREFIX;
+    LV_INFIX   VARCHAR2(256) := INFIX;
+    LV_POSTFIX VARCHAR2(256) := POSTFIX;
+  BEGIN
+    /*
+    LV_RESULT := UPPER(MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(PREFIX ||
+                                                                INFIX ||
+                                                                POSTFIX
+                                                               ,30));
+    IF LENGTH(LV_RESULT) > 30
+    THEN
+      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(LV_RESULT
+                                                              ,30);
+    END IF;
+    IF LENGTH(LV_RESULT) > 30
+    THEN
+      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_UNDERLINES_FUN(LV_RESULT
+                                                                  ,30);
+    END IF;
+    */
+  
+    LV_RESULT := UPPER(LV_PREFIX || LV_INFIX || LV_POSTFIX);
+    IF LENGTH(LV_RESULT) > 30
+    THEN
+      LV_INFIX  := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(INFIX
+                                                              ,30 -
+                                                               NVL(LENGTH(PREFIX)
+                                                                  ,0) -
+                                                               NVL(LENGTH(POSTFIX)
+                                                                  ,0));
+      LV_RESULT := UPPER(LV_PREFIX || LV_INFIX || LV_POSTFIX);
+    END IF;
+    IF LENGTH(LV_RESULT) > 30
+    THEN
+      LV_INFIX  := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_UNDERLINES_FUN(LV_INFIX
+                                                                  ,30 -
+                                                                   NVL(LENGTH(PREFIX)
+                                                                      ,0) -
+                                                                   NVL(LENGTH(POSTFIX)
+                                                                      ,0));
+      LV_RESULT := UPPER(LV_PREFIX || LV_INFIX || LV_POSTFIX);
+    END IF;
+    RETURN LV_RESULT;
+  END;
+  ---------------------------------------------------------
+  FUNCTION CREATE_SETTER_NAME( --
+                              COLUMN_NAME VARCHAR2 --
+                              ) RETURN VARCHAR2 IS
+  BEGIN
+    RETURN CREATE_FPV_NAME('SET_', COLUMN_NAME, NULL);
+  END;
+  FUNCTION CREATE_GETTER_NAME( --
+                              COLUMN_NAME VARCHAR2 --
+                              ) RETURN VARCHAR2 IS
+  BEGIN
+    RETURN CREATE_FPV_NAME('GET_', COLUMN_NAME, NULL);
+  END;
+
+  FUNCTION CREATE_SETTER_FROM_NAME( --
+                                   COLUMN_NAME VARCHAR2 --
+                                   ) RETURN CLOB IS
+  BEGIN
+    RETURN CREATE_FPV_NAME('SET_', COLUMN_NAME, '_FROM');
+  END;
+  FUNCTION CREATE_GETTER_FROM_NAME( --
+                                   COLUMN_NAME VARCHAR2 --
+                                   ) RETURN CLOB IS
+  BEGIN
+    RETURN CREATE_FPV_NAME('GET_', COLUMN_NAME, '_FROM');
+  END;
+  FUNCTION CREATE_SETTER_TO_NAME( --
+                                 COLUMN_NAME VARCHAR2 --
+                                 ) RETURN CLOB IS
+  BEGIN
+    RETURN CREATE_FPV_NAME('SET_', COLUMN_NAME, '_TO');
+  END;
+  FUNCTION CREATE_GETTER_TO_NAME( --
+                                 COLUMN_NAME VARCHAR2 --
+                                 ) RETURN CLOB IS
+  BEGIN
+    RETURN CREATE_FPV_NAME('GET_', COLUMN_NAME, '_TO');
+  END;
+  FUNCTION CREATE_GLOBAL_VARIABLE_NAME( --
+                                       COLUMN_NAME VARCHAR2 --
+                                       ) RETURN CLOB IS
+  BEGIN
+    RETURN CREATE_FPV_NAME('GV_', COLUMN_NAME, NULL);
+  END;
+
+  FUNCTION CREATE_GLOBAL_FROM_VARIBL_NAME( --
+                                          COLUMN_NAME VARCHAR2 --
+                                          ) RETURN VARCHAR2 IS
+  BEGIN
+    RETURN CREATE_FPV_NAME('GV_', COLUMN_NAME, '_FROM');
+  END;
+  FUNCTION CREATE_GLOBAL_TO_VARIABLE_NAME( --
+                                          COLUMN_NAME VARCHAR2 --
+                                          ) RETURN CLOB IS
+  BEGIN
+    RETURN CREATE_FPV_NAME('GV_', COLUMN_NAME, '_TO');
+  END;
+
+  FUNCTION CREATE_LOCAL_VARIABLE_NAME( --
+                                      COLUMN_NAME VARCHAR2 --
+                                      ) RETURN CLOB IS
+  BEGIN
+    RETURN CREATE_FPV_NAME('LV_', COLUMN_NAME, NULL);
+  END;
+
+  FUNCTION CREATE_PACKAGE_NAME( --
+                               P_PREFIX  VARCHAR2
+                              ,P_INFIX   VARCHAR2
+                              ,P_POSTFIX VARCHAR2
+                               --
+                               ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(128);
+  BEGIN
+    LV_RESULT := UPPER(P_PREFIX ||
+                       MAM_EXECUTE_IMMEDIATE_PKG.PACK_INPUT_FUN(P_INFIX
+                                                               ,30 -
+                                                                (LENGTH(P_PREFIX ||
+                                                                        P_POSTFIX))) ||
+                       P_POSTFIX);
+    IF LENGTH(LV_RESULT) > 30
+    THEN
+      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_VOWELS_FUN(LV_RESULT
+                                                              ,30);
+    END IF;
+    IF LENGTH(LV_RESULT) > 30
+    THEN
+      LV_RESULT := MAM_EXECUTE_IMMEDIATE_PKG.REMOVE_UNDERLINES_FUN(LV_RESULT
+                                                                  ,30);
+    END IF;
+    RETURN LV_RESULT;
+  END;
+  FUNCTION CREATE_FLTR_PACKAGE_DECLARATN( --
+                                         P_TABLENAME  VARCHAR2
+                                        ,SPEC_OR_BODY VARCHAR2
+                                         --
+                                         ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(100);
+  BEGIN
+    IF UPPER(TRIM(NVL(SPEC_OR_BODY, 'spec'))) = UPPER(TRIM('spec'))
+    THEN
+      LV_RESULT := 'CREATE PACKAGE ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_FLTR_PKG'
+                                       --
+                                       )
+                  --                    CREATE_FLTR_PACKAGE_NAME(P_TABLENAME) 
+                   || ' IS';
+    ELSE
+      LV_RESULT := 'CREATE PACKAGE body ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_FLTR_PKG'
+                                       --
+                                       )
+                  --                    CREATE_FLTR_PACKAGE_NAME(P_TABLENAME) 
+                  --
+                   || ' IS';
+    END IF;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_PACKAGE_DECLARATN -------------------------------------------------
+  FUNCTION CREATE_FLD_PACKAGE_DECLARATN( --
+                                        P_TABLENAME  VARCHAR2
+                                       ,SPEC_OR_BODY VARCHAR2
+                                        --
+                                        ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(100);
+  BEGIN
+    IF UPPER(TRIM(NVL(SPEC_OR_BODY, 'spec'))) = UPPER(TRIM('spec'))
+    THEN
+      LV_RESULT := 'CREATE PACKAGE ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_FLD_PKG'
+                                       --
+                                       )
+                  --       CREATE_FLD_PACKAGE_NAME(P_TABLENAME) 
+                   || ' IS';
+    ELSE
+      LV_RESULT := 'CREATE PACKAGE body ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_FLD_PKG'
+                                       --
+                                       )
+                  --                    CREATE_FLD_PACKAGE_NAME(P_TABLENAME)
+                  --
+                   || ' IS';
+    END IF;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CTRL_PACKAGE_DECLARATN( --
+                                         P_TABLENAME  VARCHAR2
+                                        ,SPEC_OR_BODY VARCHAR2
+                                         --
+                                         ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(100);
+  BEGIN
+    IF UPPER(TRIM(NVL(SPEC_OR_BODY, 'spec'))) = UPPER(TRIM('spec'))
+    THEN
+      LV_RESULT := 'CREATE PACKAGE ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_CTRL_PKG'
+                                       --
+                                       )
+                  --                    CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                   || ' IS';
+    ELSE
+      LV_RESULT := 'CREATE PACKAGE body ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_CTRL_PKG'
+                                       --
+                                       )
+                  --                    CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                   || ' IS';
+    END IF;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION MAKE_RANDOM_VIEW_NAME( --
+                                 P_TABLENAME VARCHAR2 --
+                                 ) RETURN VARCHAR2 IS
+    LV_RESULT VARCHAR2(200);
+    LV_EXIT   NUMBER;
+  BEGIN
+    LOOP
+      LV_RESULT := UPPER(TRIM(SUBSTR(P_TABLENAME, 1, 4) ||
+                              SUBSTR(SYS_GUID(), 1, 30 - 8) || '_VIW'));
+      SELECT CASE
+               WHEN EXISTS (SELECT NULL
+                       FROM ALL_OBJECTS T
+                      WHERE T.OBJECT_NAME = LV_RESULT) THEN
+                0
+               ELSE
+                1
+             END
+        INTO LV_EXIT
+        FROM DUAL;
+      EXIT WHEN LV_EXIT = 1;
+    END LOOP;
+    RETURN LV_RESULT;
+  END;
+
+  FUNCTION CREATE_APP_PACKAGE_DECLARATION( --
+                                          P_TABLENAME  VARCHAR2
+                                         ,SPEC_OR_BODY VARCHAR2
+                                          --
+                                          ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(100);
+  BEGIN
+    IF UPPER(TRIM(NVL(SPEC_OR_BODY, 'spec'))) = UPPER(TRIM('spec'))
+    THEN
+      LV_RESULT := 'CREATE PACKAGE ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_APP_PKG'
+                                       --
+                                       )
+                  --       CREATE_APP_PACKAGE_NAME(P_TABLENAME) 
+                   || ' IS';
+    ELSE
+      LV_RESULT := 'CREATE PACKAGE body ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_APP_PKG'
+                                       --
+                                       )
+                  --                    CREATE_APP_PACKAGE_NAME(P_TABLENAME)
+                   || ' IS';
+    END IF;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  ----------------------
+  FUNCTION CREATE_WRP_PACKAGE_DECLARATION( --
+                                          P_TABLENAME  VARCHAR2
+                                         ,SPEC_OR_BODY VARCHAR2
+                                          --
+                                          ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(100);
+  BEGIN
+    IF UPPER(TRIM(NVL(SPEC_OR_BODY, 'spec'))) = UPPER(TRIM('spec'))
+    THEN
+      LV_RESULT := 'CREATE PACKAGE ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_WRP_PKG'
+                                       --
+                                       )
+                  --       CREATE_APP_PACKAGE_NAME(P_TABLENAME) 
+                   || ' IS';
+    ELSE
+      LV_RESULT := 'CREATE PACKAGE body ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_WRP_PKG'
+                                       --
+                                       )
+                  --                    CREATE_APP_PACKAGE_NAME(P_TABLENAME)
+                   || ' IS';
+    END IF;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  ----------------------
+
+  FUNCTION CREATE_SETTER_DECLARATION( --
+                                     P_TABLENAME VARCHAR2
+                                    ,COLUMN_NAME VARCHAR2
+                                    ,FROM_TO     VARCHAR2
+                                     --
+                                     ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(200);
+  BEGIN
+    IF TRIM(FROM_TO) IS NULL
+    THEN
+      LV_RESULT := CREATE_SETTER_NAME(COLUMN_NAME);
+    ELSIF UPPER(TRIM(FROM_TO)) = UPPER(TRIM('FROM'))
+    THEN
+      LV_RESULT := CREATE_SETTER_FROM_NAME(COLUMN_NAME);
+    ELSIF UPPER(TRIM(FROM_TO)) = UPPER(TRIM('to'))
+    THEN
+      LV_RESULT := CREATE_SETTER_TO_NAME(COLUMN_NAME);
+    END IF;
+    LV_RESULT := 'PROCEDURE ' || LV_RESULT || '(' ||
+                 CREATE_PARAMETER_NAME(COLUMN_NAME) || ' ' ||
+                 CREATE_COLUMN_TYPE(P_TABLENAME, COLUMN_NAME) || ')';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_SETTER_PRC_BODY( --
+                                  COLUMN_NAME VARCHAR2
+                                 ,FROM_TO     VARCHAR2
+                                  --
+                                  ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(200);
+  BEGIN
+    LV_RESULT := LV_RESULT || 'begin' || CHR(10);
+    IF TRIM(FROM_TO) IS NULL
+    THEN
+      LV_RESULT := LV_RESULT || CREATE_GLOBAL_VARIABLE_NAME(COLUMN_NAME) || ':=' ||
+                   CREATE_PARAMETER_NAME(COLUMN_NAME) || ';';
+    ELSIF UPPER(TRIM(FROM_TO)) = UPPER(TRIM('FROM'))
+    THEN
+      LV_RESULT := LV_RESULT || CREATE_GLOBAL_FROM_VARIBL_NAME(COLUMN_NAME) ||
+                  --                    CREATE_GLOBAL_VARIABLE_NAME(COLUMN_NAME || '_from') ||
+                   ' :=' || CREATE_PARAMETER_NAME(COLUMN_NAME) || ';';
+    ELSIF UPPER(TRIM(FROM_TO)) = UPPER(TRIM('to'))
+    THEN
+      LV_RESULT := LV_RESULT || CREATE_GLOBAL_TO_VARIABLE_NAME(COLUMN_NAME) ||
+                  --                    CREATE_GLOBAL_VARIABLE_NAME(COLUMN_NAME || '_to') ||
+                   ' :=' || CREATE_PARAMETER_NAME(COLUMN_NAME) || ';';
+    END IF;
+    LV_RESULT := UPPER(LV_RESULT || CHR(10) || 'END;' || CHR(10));
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_GETTER_DECLARATION( --
+                                     P_TABLENAME VARCHAR2
+                                    ,COLUMN_NAME VARCHAR2
+                                    ,FROM_TO     VARCHAR2
+                                     --
+                                     ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(200);
+  BEGIN
+    IF TRIM(FROM_TO) IS NULL
+    THEN
+      LV_RESULT := CREATE_GETTER_NAME(COLUMN_NAME);
+    ELSIF UPPER(TRIM(FROM_TO)) = UPPER(TRIM('FROM'))
+    THEN
+      LV_RESULT := CREATE_GETTER_FROM_NAME(COLUMN_NAME);
+    ELSIF UPPER(TRIM(FROM_TO)) = UPPER(TRIM('to'))
+    THEN
+      LV_RESULT := CREATE_GETTER_TO_NAME(COLUMN_NAME);
+    END IF;
+    LV_RESULT := 'FUNCTION ' || LV_RESULT || ' RETURN ' ||
+                 CREATE_COLUMN_TYPE(P_TABLENAME, COLUMN_NAME);
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  FUNCTION CREATE_GETTER_FUN_BODY( --
+                                  COLUMN_NAME VARCHAR2
+                                 ,FROM_TO     VARCHAR2
+                                  --
+                                  ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(200);
+  BEGIN
+    LV_RESULT := LV_RESULT || 'begin' || CHR(10) || 'RETURN ';
+    IF TRIM(FROM_TO) IS NULL
+    THEN
+      LV_RESULT := LV_RESULT || CREATE_GLOBAL_VARIABLE_NAME(COLUMN_NAME) || ';';
+    ELSIF UPPER(TRIM(FROM_TO)) = UPPER(TRIM('FROM'))
+    THEN
+      LV_RESULT := LV_RESULT || CREATE_GLOBAL_FROM_VARIBL_NAME(COLUMN_NAME)
+                  --                    CREATE_GLOBAL_VARIABLE_NAME(COLUMN_NAME || '_from') 
+                   || ';';
+    ELSIF UPPER(TRIM(FROM_TO)) = UPPER(TRIM('to'))
+    THEN
+      LV_RESULT := LV_RESULT || CREATE_GLOBAL_TO_VARIABLE_NAME(COLUMN_NAME)
+                  --                    CREATE_GLOBAL_VARIABLE_NAME(COLUMN_NAME || '_to') 
+                   || ';';
+    END IF;
+    LV_RESULT := LV_RESULT || CHR(10) || 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  FUNCTION CREATE_GETTER_SETTER_SPEC(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+    I         NUMBER;
+  BEGIN
+    --GETTER_AND_SETTER
+    I := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT := LV_RESULT || '-- GETTER AND SETTER FOR ' ||
+                   C.COLUMN_NAME || LPAD('-', 30, '-') || CV_BEAUTY_DASH ||
+                   CHR(10);
+      LV_RESULT := LV_RESULT || CREATE_SETTER_DECLARATION( --
+                                                          P_TABLENAME
+                                                         ,C.COLUMN_NAME
+                                                         ,NULL --FROM_TO     
+                                                          --
+                                                          ) || ';--' ||
+                   TO_CHAR(I) || '--' || CHR(10);
+      IF (C.SUBJECT_OF_FROM_TO = 1)
+      THEN
+        LV_RESULT := LV_RESULT || CREATE_SETTER_DECLARATION( --
+                                                            P_TABLENAME
+                                                           ,C.COLUMN_NAME
+                                                           ,'FROM'
+                                                            --
+                                                            ) || ';--' ||
+                     TO_CHAR(I) || '--' || CHR(10);
+        LV_RESULT := LV_RESULT || CREATE_SETTER_DECLARATION( --
+                                                            P_TABLENAME
+                                                           ,C.COLUMN_NAME
+                                                           ,'TO'
+                                                            --
+                                                            ) || ';--' ||
+                     TO_CHAR(I) || '--' || CHR(10);
+      END IF;
+      LV_RESULT := LV_RESULT || CREATE_GETTER_DECLARATION( --
+                                                          P_TABLENAME
+                                                         ,C.COLUMN_NAME
+                                                         ,NULL --FROM_TO     
+                                                          --
+                                                          ) || ';--' ||
+                   TO_CHAR(I) || '--' || CHR(10);
+      IF (C.SUBJECT_OF_FROM_TO = 1)
+      THEN
+        LV_RESULT := LV_RESULT || CREATE_GETTER_DECLARATION( --
+                                                            P_TABLENAME
+                                                           ,C.COLUMN_NAME
+                                                           ,'FROM'
+                                                            --
+                                                            ) || ';--' ||
+                     TO_CHAR(I) || '--' || CHR(10);
+        LV_RESULT := LV_RESULT || CREATE_GETTER_DECLARATION( --
+                                                            P_TABLENAME
+                                                           ,C.COLUMN_NAME
+                                                           ,'TO'
+                                                            --
+                                                            ) || ';--' ||
+                     TO_CHAR(I) || '--' || CHR(10);
+      END IF;
+      I := I + 1;
+    END LOOP;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  FUNCTION CREATE_GETTER_SETTER_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+    I         NUMBER;
+  BEGIN
+    --GETTER_AND_SETTER
+    I := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT := LV_RESULT || '-- GETTER AND SETTER FOR ' ||
+                   C.COLUMN_NAME || CV_BEAUTY_DASH || CHR(10);
+      LV_RESULT := LV_RESULT || CREATE_SETTER_DECLARATION( --
+                                                          P_TABLENAME
+                                                         ,C.COLUMN_NAME
+                                                         ,NULL --FROM_TO     
+                                                          --
+                                                          ) ||
+                   UPPER(' is --') || TO_CHAR(I) || '--' || CHR(10);
+      LV_RESULT := LV_RESULT || CREATE_SETTER_PRC_BODY( --
+                                                       C.COLUMN_NAME
+                                                      ,NULL --FROM_TO     
+                                                       --
+                                                       );
+      IF (C.SUBJECT_OF_FROM_TO = 1)
+      THEN
+        LV_RESULT := LV_RESULT || CREATE_SETTER_DECLARATION( --
+                                                            P_TABLENAME
+                                                           ,C.COLUMN_NAME
+                                                           ,'FROM'
+                                                            --
+                                                            ) ||
+                     UPPER(' is --') || TO_CHAR(I) || '--' || CHR(10);
+        LV_RESULT := LV_RESULT || CREATE_SETTER_PRC_BODY( --
+                                                         C.COLUMN_NAME
+                                                        ,'FROM' --FROM_TO     
+                                                         --
+                                                         );
+        LV_RESULT := LV_RESULT || CREATE_SETTER_DECLARATION( --
+                                                            P_TABLENAME
+                                                           ,C.COLUMN_NAME
+                                                           ,'TO'
+                                                            --
+                                                            ) ||
+                     UPPER(' is --') || TO_CHAR(I) || '--' || CHR(10);
+        LV_RESULT := LV_RESULT || CREATE_SETTER_PRC_BODY( --
+                                                         C.COLUMN_NAME
+                                                        ,'to' --FROM_TO     
+                                                         --
+                                                         );
+      END IF;
+    
+      LV_RESULT := LV_RESULT || CREATE_GETTER_DECLARATION( --
+                                                          P_TABLENAME
+                                                         ,C.COLUMN_NAME
+                                                         ,NULL --FROM_TO     
+                                                          --
+                                                          ) ||
+                   UPPER(' is --') || TO_CHAR(I) || '--' || CHR(10);
+      LV_RESULT := LV_RESULT || CREATE_GETTER_FUN_BODY( --
+                                                       C.COLUMN_NAME
+                                                      ,NULL --FROM_TO     
+                                                       --
+                                                       );
+      IF (C.SUBJECT_OF_FROM_TO = 1)
+      THEN
+        LV_RESULT := LV_RESULT || CREATE_GETTER_DECLARATION( --
+                                                            P_TABLENAME
+                                                           ,C.COLUMN_NAME
+                                                           ,'FROM'
+                                                            --
+                                                            ) ||
+                     UPPER(' is --') || TO_CHAR(I) || '--' || CHR(10);
+        LV_RESULT := LV_RESULT || CREATE_GETTER_FUN_BODY( --
+                                                         C.COLUMN_NAME
+                                                        ,'FROM' --FROM_TO     
+                                                         --
+                                                         );
+        LV_RESULT := LV_RESULT || CREATE_GETTER_DECLARATION( --
+                                                            P_TABLENAME
+                                                           ,C.COLUMN_NAME
+                                                           ,'TO'
+                                                            --
+                                                            ) ||
+                     UPPER(' is --') || TO_CHAR(I) || '--' || CHR(10);
+        LV_RESULT := LV_RESULT || CREATE_GETTER_FUN_BODY( --
+                                                         C.COLUMN_NAME
+                                                        ,'TO' --FROM_TO     
+                                                         --
+                                                         );
+      END IF;
+      I := I + 1;
+    END LOOP;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_GETTER_FUN_DCL ---------------------------------------------------------
+  FUNCTION CREATE_FLD_GETTER_FUN_DCL( --
+                                     P_TABLENAME VARCHAR2
+                                    ,COLUMN_NAME VARCHAR2
+                                     --
+                                     ) RETURN CLOB IS
+    LV_RESULT  CLOB;
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := 'FUNCTION ' || CREATE_GETTER_NAME(COLUMN_NAME) || '(--' ||
+                  CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C1 IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C1.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C1.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN ' ||
+                 CREATE_COLUMN_TYPE(P_TABLENAME, COLUMN_NAME);
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_GETTER_FUN_BODY --------------------------------------------------------
+  FUNCTION CREATE_FLD_GETTER_FUN_BODY( --
+                                      P_TABLENAME VARCHAR2
+                                     ,COLUMN_NAME VARCHAR2
+                                      --
+                                      ) RETURN CLOB IS
+    LV_RESULT              CLOB;
+    LV_LOCAL_VARIABLE_NAME VARCHAR2(200) := CREATE_LOCAL_VARIABLE_NAME(COLUMN_NAME);
+    DELIMITTER             VARCHAR2(10);
+    I                      NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT || LV_LOCAL_VARIABLE_NAME || ' ' ||
+                 CREATE_COLUMN_TYPE(P_TABLENAME, COLUMN_NAME) || ';';
+    LV_RESULT := LV_RESULT || 'begin begin';
+    LV_RESULT := LV_RESULT || CHR(10) || 'select ' || COLUMN_NAME ||
+                 ' into ' || LV_LOCAL_VARIABLE_NAME;
+  
+    LV_RESULT := LV_RESULT || CHR(10) || ' from ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' WHERE ';
+    -- <WHERE parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --WHERE parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ';' || CHR(10) || 'EXCEPTION' ||
+                 CHR(10) || ' WHEN OTHERS THEN ' || CHR(10) || 'null;' ||
+                 CHR(10) || 'END;' || CHR(10) || 'RETURN ' ||
+                 LV_LOCAL_VARIABLE_NAME || ';' || CHR(10) || 'end;' ||
+                 CHR(10);
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_GET_PK_FUN_NAME -----------------------
+  FUNCTION CREATE_FLD_GET_PK_FUN_NAME( --
+                                      P_TABLENAME    VARCHAR2
+                                     ,CONTRAINT_NAME VARCHAR2
+                                     ,P_UK_COUNT     NUMBER
+                                      --
+                                      ) RETURN CLOB IS
+    LV_RESULT CLOB;
+  BEGIN
+    IF P_UK_COUNT = 1
+    THEN
+      FOR C1 IN UK_COLUMNS(P_TABLENAME, CONTRAINT_NAME)
+      LOOP
+        LV_RESULT := CREATE_GETTER_NAME('PK_BY_' || C1.COLUMN_NAME);
+      END LOOP;
+    ELSE
+      LV_RESULT := CREATE_GETTER_NAME('PK_BY_' || CONTRAINT_NAME);
+    END IF;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_GET_PK_FUN_DCL -----------------------
+  FUNCTION CREATE_FLD_GET_PK_FUN_DCL( --
+                                     P_TABLENAME    VARCHAR2
+                                    ,CONTRAINT_NAME VARCHAR2
+                                    ,P_UK_COUNT     NUMBER
+                                     --
+                                     ) RETURN CLOB IS
+    LV_RESULT  CLOB;
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    --RAISE_APPLICATION_ERROR(1, 1);
+    LV_RESULT  := 'FUNCTION ' ||
+                  CREATE_FLD_GET_PK_FUN_NAME( --
+                                             P_TABLENAME    => P_TABLENAME
+                                            ,CONTRAINT_NAME => CONTRAINT_NAME
+                                            ,P_UK_COUNT     => P_UK_COUNT
+                                             --
+                                             ) || '(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+  
+    FOR C1 IN UK_COLUMNS(P_TABLENAME, CONTRAINT_NAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C1.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C1.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT  := LV_RESULT || ') RETURN ';
+    DELIMITTER := '';
+    FOR C1 IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_COLUMN_TYPE(P_TABLENAME, C1.COLUMN_NAME);
+      DELIMITTER := ', ';
+    END LOOP;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_GET_PK_FUN_BODY -----------------------
+  FUNCTION CREATE_FLD_GET_PK_FUN_BODY( --
+                                      P_TABLENAME    VARCHAR2
+                                     ,CONTRAINT_NAME VARCHAR2
+                                      --
+                                      ) RETURN CLOB IS
+    LV_RESULT CLOB;
+    --LV_LOCAL_VARIABLE_NAME VARCHAR2(200) := CREATE_LOCAL_VARIABLE_NAME(COLUMN_NAME);
+    LV_PK_COLUMN_NAME VARCHAR2(200);
+    LV_PK_COLUMN_TYPE VARCHAR2(200);
+    DELIMITTER        VARCHAR2(10);
+    I                 NUMBER;
+  BEGIN
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_PK_COLUMN_NAME := C.COLUMN_NAME;
+      LV_PK_COLUMN_TYPE := CREATE_COLUMN_TYPE(P_TABLENAME, C.COLUMN_NAME);
+    END LOOP;
+  
+    LV_RESULT := LV_RESULT || 'LV_RESULT ' || LV_PK_COLUMN_TYPE || ';';
+    LV_RESULT := LV_RESULT || 'begin begin';
+    LV_RESULT := LV_RESULT || CHR(10) || 'select ' || LV_PK_COLUMN_NAME ||
+                 ' into LV_RESULT';
+  
+    LV_RESULT := LV_RESULT || CHR(10) || ' from ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' WHERE ';
+    -- <WHERE parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN UK_COLUMNS(P_TABLENAME, CONTRAINT_NAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --WHERE parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ';' || CHR(10) || 'EXCEPTION' ||
+                 CHR(10) || ' WHEN OTHERS THEN ' || CHR(10) || 'null;' ||
+                 CHR(10) || 'END;' || CHR(10) || 'RETURN LV_RESULT;' ||
+                 CHR(10) || 'end;' || CHR(10);
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  -- CREATE_FLD_LKP_CVL_FUN_NAME -----------------------
+  FUNCTION CREATE_FLD_LKP_CVL_FUN_NAME(P_COLUMN_NAME VARCHAR2)
+    RETURN VARCHAR2 IS
+    LV_COLUMN_NAME VARCHAR2(100) := P_COLUMN_NAME || '_cvl';
+    LV_RESULT      VARCHAR2(50);
+  BEGIN
+    /*
+    LV_RESULT := CASE
+                   WHEN LENGTH(LV_COLUMN_NAME) + 5 < 31 THEN
+                    CREATE_GETTER_NAME(LV_COLUMN_NAME)
+                   ELSE
+                    CREATE_GETTER_NAME(SUBSTR(LV_COLUMN_NAME, 1, 25))
+                 END;
+                 */
+    LV_RESULT := CREATE_FPV_NAME( --
+                                 PREFIX  => 'get_'
+                                ,INFIX   => P_COLUMN_NAME
+                                ,POSTFIX => '_cvl'
+                                 --
+                                 );
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_LKP_CVL_FUN_DCL -----------------------
+  FUNCTION CREATE_FLD_LKP_CVL_FUN_DCL( --
+                                      P_TABLENAME VARCHAR2
+                                     ,COLUMN_NAME VARCHAR2
+                                      --
+                                      ) RETURN CLOB IS
+    LV_RESULT            CLOB;
+    DELIMITTER           VARCHAR2(10);
+    I                    NUMBER;
+    LV_LKP_DESC_FUN_NAME VARCHAR2(50);
+  BEGIN
+    LV_LKP_DESC_FUN_NAME := CREATE_FLD_LKP_CVL_FUN_NAME(P_COLUMN_NAME => COLUMN_NAME);
+    LV_RESULT            := 'FUNCTION ' || LV_LKP_DESC_FUN_NAME ||
+                            '(P_Cod varchar2) RETURN varchar2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_LKP_CVL_FUN_BODY -----------------------
+  FUNCTION CREATE_FLD_LKP_CVL_FUN_BODY( --
+                                       P_TABLENAME VARCHAR2
+                                      ,COLUMN_NAME VARCHAR2
+                                       --
+                                       ) RETURN CLOB IS
+    LV_RESULT  CLOB;
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT || 'lv_result varchar2(1000);';
+    LV_RESULT := LV_RESULT || 'begin ' || CHR(10);
+    LV_RESULT := LV_RESULT ||
+                 'if  p_cod is not null then lv_result:= MAM_FROM_FND_PKG.GET_FARSI_MEANING_FUN( --' ||
+                 CHR(10) || 'P_TABLE  => ''' || P_TABLENAME ||
+                 ''',P_COLUMN => ''' || COLUMN_NAME ||
+                 ''',P_VALUE  => p_cod' || CHR(10) || '--' || CHR(10) || ')' || ';' ||
+                 'end if;' || CHR(10);
+    LV_RESULT := LV_RESULT ||
+                 'if lv_result is not null then lv_result :=p_cod||'': ''||lv_result;' ||
+                 CHR(10) || 'end if;';
+    LV_RESULT := LV_RESULT || 'RETURN ' || --LV_LOCAL_VARIABLE_NAME 
+                 'lv_result ' --
+                 || ';' || CHR(10) || 'end;' || CHR(10);
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_LKP_DESC_FUN_NAME -----------------------
+  FUNCTION CREATE_FLD_LKP_DESC_FUN_NAME( --
+                                        COLUMN_NAME VARCHAR2
+                                        --
+                                        ) RETURN VARCHAR2 IS
+    --     LV_COLUMN_NAME VARCHAR2(100) := COLUMN_NAME || '_desc';
+    LV_RESULT VARCHAR2(50);
+  BEGIN
+    /*
+        LV_RESULT := CASE
+                       WHEN LENGTH(LV_COLUMN_NAME) + 5 < 31 THEN
+                        CREATE_GETTER_NAME(LV_COLUMN_NAME)
+                       ELSE
+                        CREATE_GETTER_NAME(SUBSTR(LV_COLUMN_NAME, 1, 25))
+                     END;
+    */
+    LV_RESULT := CREATE_FPV_NAME('get_', COLUMN_NAME, '_desc');
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_LKP_DESC_FUN_DCL -----------------------
+  FUNCTION CREATE_FLD_LKP_DESC_FUN_DCL( --
+                                       P_TABLENAME VARCHAR2
+                                      ,COLUMN_NAME VARCHAR2
+                                       --
+                                       ) RETURN CLOB IS
+    LV_RESULT            CLOB;
+    DELIMITTER           VARCHAR2(10);
+    I                    NUMBER;
+    LV_LKP_DESC_FUN_NAME VARCHAR2(50);
+  BEGIN
+    LV_LKP_DESC_FUN_NAME := CREATE_FLD_LKP_DESC_FUN_NAME(COLUMN_NAME => COLUMN_NAME);
+    LV_RESULT            := 'FUNCTION ' || LV_LKP_DESC_FUN_NAME || '(--' ||
+                            CHR(10);
+    DELIMITTER           := '';
+    I                    := 1;
+    FOR C1 IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C1.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C1.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN varchar2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_LKP_DESC_FUN_BODY -----------------------
+  FUNCTION CREATE_FLD_LKP_DESC_FUN_BODY( --
+                                        P_TABLENAME VARCHAR2
+                                       ,COLUMN_NAME VARCHAR2
+                                        --
+                                        ) RETURN CLOB IS
+    LV_RESULT CLOB;
+    --    LV_LOCAL_VARIABLE_NAME VARCHAR2(200) := CREATE_LOCAL_VARIABLE_NAME(COLUMN_NAME);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    --    LV_RESULT := LV_RESULT || LV_LOCAL_VARIABLE_NAME || ' ' ||CREATE_COLUMN_TYPE(COLUMN_NAME) || ';';
+    LV_RESULT := LV_RESULT || 'lv_result varchar2(1000);';
+    LV_RESULT := LV_RESULT || 'begin begin';
+    LV_RESULT := LV_RESULT || CHR(10) || 'select ' ||
+                 CREATE_FLD_LKP_CVL_FUN_NAME(P_COLUMN_NAME => COLUMN_NAME) ||
+                 '(P_COD =>' || COLUMN_NAME || ') into ' || --LV_LOCAL_VARIABLE_NAME;
+                 ' lv_result';
+  
+    LV_RESULT := LV_RESULT || CHR(10) || ' from ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' WHERE ';
+    -- <WHERE parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --WHERE parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ';' || CHR(10);
+    LV_RESULT := LV_RESULT || 'EXCEPTION' || CHR(10) ||
+                 ' WHEN OTHERS THEN ' || CHR(10) || 'null;' || CHR(10) ||
+                 'END;' || CHR(10);
+    LV_RESULT := LV_RESULT || ' RETURN ' || --LV_LOCAL_VARIABLE_NAME 
+                 'lv_result ' --
+                 || ';' || CHR(10) || 'end;' || CHR(10);
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_HEJRI_DATE_FUN_NAME -----------------------
+  FUNCTION CREATE_FLD_HEJRI_DATE_FUN_NAME( --
+                                          COLUMN_NAME VARCHAR2
+                                          --
+                                          ) RETURN VARCHAR2 IS
+    LV_RESULT VARCHAR2(50);
+  BEGIN
+    LV_RESULT := CREATE_FPV_NAME( --
+                                 PREFIX  => 'GET_'
+                                ,INFIX   => COLUMN_NAME
+                                ,POSTFIX => '_H'
+                                 --                           
+                                 );
+    /*
+        LV_RESULT := CASE
+                       WHEN LENGTH(COLUMN_NAME) + 5 < 31 THEN
+                        CREATE_GETTER_NAME(COLUMN_NAME || '_h')
+                       ELSE
+                        CREATE_GETTER_NAME(SUBSTR(COLUMN_NAME, 1, 27)) || '_h'
+                     END;
+    */
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_HEJRI_DATE_FUN_DCL ---------------------------------------------------------
+  FUNCTION CREATE_FLD_HEJRI_DATE_FUN_DCL( --
+                                         P_TABLENAME VARCHAR2
+                                        ,COLUMN_NAME VARCHAR2
+                                         --
+                                         ) RETURN CLOB IS
+    LV_RESULT  CLOB;
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := 'FUNCTION ' ||
+                  CREATE_FLD_HEJRI_DATE_FUN_NAME(COLUMN_NAME) || '(--' ||
+                  CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C1 IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C1.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C1.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_HEJRI_DATE_FUN_BODY -----------------------
+  FUNCTION CREATE_FLD_HEJRI_DATE_FUN_BODY( --
+                                          P_TABLENAME VARCHAR2
+                                         ,COLUMN_NAME VARCHAR2
+                                          --
+                                          ) RETURN CLOB IS
+    LV_RESULT CLOB;
+    --     LV_LOCAL_VARIABLE_NAME VARCHAR2(200) := CREATE_LOCAL_VARIABLE_NAME(COLUMN_NAME);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT || 'LV_RESULT varchar2(20);' || CHR(10);
+    LV_RESULT := LV_RESULT || 'begin begin';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'select MAM_HEJRI_DATE_HANDLING_PKG.TO_HEJRI_STRING(P_DATE => ' ||
+                 COLUMN_NAME || ') into LV_RESULT';
+  
+    LV_RESULT := LV_RESULT || CHR(10) || ' from ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' WHERE ';
+    -- <WHERE parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --WHERE parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ';' || CHR(10) || 'EXCEPTION' ||
+                 CHR(10) || ' WHEN OTHERS THEN ' || CHR(10) || 'null;' ||
+                 CHR(10) || 'END;' || CHR(10) || 'RETURN LV_RESULT;' ||
+                 CHR(10) || 'end;' || CHR(10);
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_PKG_SPEC -----------------------
+  FUNCTION CREATE_FLD_PKG_SPEC(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+    I         NUMBER;
+  BEGIN
+    --GETTER_AND_SETTER
+    I := 1;
+    FOR C IN TABLE_COLUMNS_FLD(P_TABLENAME, NULL)
+    LOOP
+      IF NVL(C.IS_PK, 0) != 1
+      THEN
+        LV_RESULT := LV_RESULT || '-- GETTER FOR ' || C.COLUMN_NAME ||
+                     LPAD('-', 30, '-') || CV_BEAUTY_DASH || CHR(10);
+        LV_RESULT := LV_RESULT || CREATE_FLD_GETTER_FUN_DCL( --
+                                                            P_TABLENAME
+                                                           ,C.COLUMN_NAME
+                                                            --
+                                                            ) || ';--' ||
+                     TO_CHAR(I) || '--' || CHR(10);
+        IF C.COLUMN_NAME LIKE UPPER('lkp%')
+        THEN
+          LV_RESULT := LV_RESULT ||
+                       '-- GET COD AND FARSI_MEANING BY COD 4 ' ||
+                       C.COLUMN_NAME || LPAD('-', 30, '-') ||
+                       CV_BEAUTY_DASH || CHR(10);
+          LV_RESULT := LV_RESULT ||
+                       CREATE_FLD_LKP_CVL_FUN_DCL( --
+                                                  P_TABLENAME
+                                                 ,C.COLUMN_NAME
+                                                  --
+                                                  ) || ';--' || TO_CHAR(I) || '--' ||
+                       CHR(10);
+          LV_RESULT := LV_RESULT || '-- GET COD AND FARSI_MEANING BY PK 4 ' ||
+                       C.COLUMN_NAME || LPAD('-', 30, '-') ||
+                       CV_BEAUTY_DASH || CHR(10);
+          LV_RESULT := LV_RESULT ||
+                       CREATE_FLD_LKP_DESC_FUN_DCL( --
+                                                   P_TABLENAME
+                                                  ,C.COLUMN_NAME
+                                                   --
+                                                   ) || ';--' || TO_CHAR(I) || '--' ||
+                       CHR(10);
+        END IF;
+        IF C.DATA_TYPE LIKE UPPER('DATE')
+        THEN
+          LV_RESULT := LV_RESULT || '-- GET HEJRI DATE 4 ' || C.COLUMN_NAME ||
+                       CREATE_FLD_HEJRI_DATE_FUN_NAME(COLUMN_NAME => C.COLUMN_NAME) ||
+                       LPAD('-', 30, '-') || CV_BEAUTY_DASH || CHR(10);
+          LV_RESULT := LV_RESULT ||
+                       CREATE_FLD_HEJRI_DATE_FUN_DCL(P_TABLENAME => P_TABLENAME
+                                                    ,COLUMN_NAME => C.COLUMN_NAME) ||
+                       ';--' || TO_CHAR(I) || '--' || CHR(10);
+        END IF;
+      END IF;
+      I := I + 1;
+    END LOOP;
+    --
+    FOR C IN TB_UK(P_TABLENAME)
+    LOOP
+      IF C.PK_COUNT = 1
+      THEN
+        LV_RESULT := LV_RESULT || '-- ' ||
+                     CREATE_FLD_GET_PK_FUN_NAME( --
+                                                P_TABLENAME    => P_TABLENAME
+                                               ,CONTRAINT_NAME => C.CONSTRAINT_NAME
+                                               ,P_UK_COUNT     => C.CONSTRAINT_COUNT
+                                                --
+                                                ) || LPAD('-', 30, '-') ||
+                     CV_BEAUTY_DASH || CHR(10);
+        LV_RESULT := LV_RESULT || CREATE_FLD_GET_PK_FUN_DCL( --
+                                                            P_TABLENAME    => P_TABLENAME
+                                                           ,CONTRAINT_NAME => C.CONSTRAINT_NAME
+                                                           ,P_UK_COUNT     => C.CONSTRAINT_COUNT
+                                                            --
+                                                            ) || ';--' ||
+                     CHR(10);
+      ELSE
+        CONTINUE;
+      END IF;
+    END LOOP;
+  
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_FLD_PKG_BODY ----------------------------------------------------------
+  FUNCTION CREATE_FLD_PKG_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB;
+    I         NUMBER;
+  BEGIN
+    --GETTER 
+    I := 1;
+    FOR C IN TABLE_COLUMNS_FLD(P_TABLENAME, NULL)
+    LOOP
+      IF NVL(C.IS_PK, 0) != 1
+      THEN
+        LV_RESULT := LV_RESULT || '-- GETTER FOR ' || C.COLUMN_NAME ||
+                     CV_BEAUTY_DASH || CHR(10);
+      
+        LV_RESULT := LV_RESULT || CREATE_FLD_GETTER_FUN_DCL( --
+                                                            P_TABLENAME
+                                                           ,C.COLUMN_NAME
+                                                            --
+                                                            ) ||
+                     UPPER(' is --') || TO_CHAR(I) || '--' || CHR(10) ||
+                     CREATE_FLD_GETTER_FUN_BODY( --
+                                                P_TABLENAME
+                                               ,C.COLUMN_NAME
+                                                --
+                                                );
+        IF C.COLUMN_NAME LIKE UPPER('lkp%')
+        THEN
+          LV_RESULT := LV_RESULT ||
+                       '-- GET COD AND FARSI_MEANING BY COD 4 ' ||
+                       C.COLUMN_NAME || LPAD('-', 30, '-') ||
+                       CV_BEAUTY_DASH || CHR(10);
+          LV_RESULT := LV_RESULT ||
+                       CREATE_FLD_LKP_CVL_FUN_DCL( --
+                                                  P_TABLENAME
+                                                 ,C.COLUMN_NAME
+                                                  --
+                                                  ) || UPPER(' is --') ||
+                       TO_CHAR(I) || '--' || CHR(10) ||
+                       CREATE_FLD_LKP_CVL_FUN_BODY( --
+                                                   P_TABLENAME
+                                                  ,C.COLUMN_NAME
+                                                   --
+                                                   );
+          LV_RESULT := LV_RESULT || '-- GET COD AND FARSI_MEANING BY PK 4 ' ||
+                       C.COLUMN_NAME || LPAD('-', 30, '-') ||
+                       CV_BEAUTY_DASH || CHR(10);
+          LV_RESULT := LV_RESULT ||
+                       CREATE_FLD_LKP_DESC_FUN_DCL( --
+                                                   P_TABLENAME
+                                                  ,C.COLUMN_NAME
+                                                   --
+                                                   ) || UPPER(' is --') ||
+                       TO_CHAR(I) || '--' || CHR(10) ||
+                       CREATE_FLD_LKP_DESC_FUN_BODY( --
+                                                    P_TABLENAME
+                                                   ,C.COLUMN_NAME
+                                                    --
+                                                    );
+        END IF;
+        IF C.DATA_TYPE LIKE UPPER('DATE')
+        THEN
+          LV_RESULT := LV_RESULT || '-- GET HEJRI DATE 4 ' || C.COLUMN_NAME ||
+                       LPAD('-', 30, '-') || CV_BEAUTY_DASH || CHR(10);
+          LV_RESULT := LV_RESULT ||
+                       CREATE_FLD_HEJRI_DATE_FUN_DCL( --
+                                                     P_TABLENAME => P_TABLENAME
+                                                    ,COLUMN_NAME => C.COLUMN_NAME
+                                                     --
+                                                     ) || UPPER(' is --') ||
+                       TO_CHAR(I) || '--' || CHR(10) ||
+                       CREATE_FLD_HEJRI_DATE_FUN_BODY( --
+                                                      P_TABLENAME => P_TABLENAME
+                                                     ,COLUMN_NAME => C.COLUMN_NAME
+                                                      -- 
+                                                      );
+        
+        END IF;
+      END IF;
+      I := I + 1;
+    END LOOP;
+    --
+    FOR C IN TB_UK(P_TABLENAME)
+    LOOP
+      IF C.PK_COUNT = 1
+      THEN
+        LV_RESULT := LV_RESULT || '-- ' ||
+                     CREATE_FLD_GET_PK_FUN_NAME( --
+                                                P_TABLENAME    => P_TABLENAME
+                                               ,CONTRAINT_NAME => C.CONSTRAINT_NAME
+                                               ,P_UK_COUNT     => C.CONSTRAINT_COUNT
+                                                --
+                                                ) || LPAD('-', 30, '-') ||
+                     CV_BEAUTY_DASH || CHR(10);
+        LV_RESULT := LV_RESULT || CREATE_FLD_GET_PK_FUN_DCL( --
+                                                            P_TABLENAME    => P_TABLENAME
+                                                           ,CONTRAINT_NAME => C.CONSTRAINT_NAME
+                                                           ,P_UK_COUNT     => C.CONSTRAINT_COUNT
+                                                            --
+                                                            ) ||
+                     UPPER(' is --') || TO_CHAR(I) || '--' || CHR(10) ||
+                     CREATE_FLD_GET_PK_FUN_BODY( --
+                                                P_TABLENAME    => P_TABLENAME
+                                               ,CONTRAINT_NAME => C.CONSTRAINT_NAME
+                                                --
+                                                ) || '--' || CHR(10);
+      ELSE
+        CONTINUE;
+      END IF;
+    END LOOP;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_GLOBAL_VARIABLES_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+    I         NUMBER;
+  BEGIN
+    --GETTER_AND_SETTER
+    LV_RESULT := LV_RESULT || '-- GLOBAL VARIABLES' || CV_BEAUTY_DASH ||
+                 CHR(10);
+    I         := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT := LV_RESULT || CREATE_GLOBAL_VARIABLE_NAME( --
+                                                            C.COLUMN_NAME
+                                                            --
+                                                            ) || ' ' ||
+                   CREATE_COLUMN_TYPE( --
+                                      P_TABLENAME
+                                     ,C.COLUMN_NAME
+                                      --
+                                      ) || ';--' || TO_CHAR(I) || '--' ||
+                   CHR(10);
+      IF (C.SUBJECT_OF_FROM_TO = 1)
+      THEN
+        LV_RESULT := LV_RESULT ||
+                     CREATE_GLOBAL_FROM_VARIBL_NAME( --
+                                                    C.COLUMN_NAME
+                                                    --
+                                                    ) || ' ' ||
+                     CREATE_COLUMN_TYPE( --
+                                        P_TABLENAME
+                                       ,C.COLUMN_NAME
+                                        --
+                                        ) || ';--' || TO_CHAR(I) || '--' ||
+                     CHR(10);
+        LV_RESULT := LV_RESULT ||
+                     CREATE_GLOBAL_TO_VARIABLE_NAME( --
+                                                    C.COLUMN_NAME
+                                                    --
+                                                    ) || ' ' ||
+                     CREATE_COLUMN_TYPE( --
+                                        P_TABLENAME
+                                       ,C.COLUMN_NAME
+                                        --
+                                        ) || ';--' || TO_CHAR(I) || '--' ||
+                     CHR(10);
+      END IF;
+      I := I + 1;
+    END LOOP;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  FUNCTION CREATE_CHECK_LOCK_DECLARATION(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- check_lock' || CV_BEAUTY_DASH || CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION check_lock(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_LOCK_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT ||
+                  CREATE_CHECK_LOCK_DECLARATION(P_TABLENAME => P_TABLENAME) ||
+                  ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' ||
+                  CHR(10);
+    DELIMITTER := NULL;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT := LV_RESULT || DELIMITTER ||
+                   CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || ' ' ||
+                   CREATE_COLUMN_TYPE(P_TABLENAME, C.COLUMN_NAME) || ';' ||
+                   CHR(10);
+      I         := I + 1;
+    END LOOP;
+    LV_RESULT  := LV_RESULT || 'begin';
+    LV_RESULT  := LV_RESULT || CHR(10) || 'BEGIN';
+    LV_RESULT  := LV_RESULT || CHR(10) || 'select ';
+    DELIMITTER := NULL;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER || C.COLUMN_NAME;
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT  := LV_RESULT || ' into ';
+    DELIMITTER := NULL;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || ' from ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' WHERE ';
+    -- <WHERE parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --WHERE parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || 'for update nowait;' || CHR(10) ||
+                 'EXCEPTION' || CHR(10) || ' WHEN NO_DATA_FOUND THEN
+        NULL; WHEN OTHERS THEN ' || CHR(10) ||
+                 'LV_RESULT := ''{رکورد شناسه ';
+    -- <WHERE parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER || ''' ||to_char(' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ')||''';
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    --WHERE parameters>
+  
+    LV_RESULT := LV_RESULT || ' از ' ||
+                 TABLE_COMMENT_FUN(P_TABLENAME => P_TABLENAME) ||
+                 '  قفل شده است}'';';
+    LV_RESULT := LV_RESULT || CHR(10) || 'END;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_KEY_EXISTS_DECLARATION(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- KEY_EXISTS' || CV_BEAUTY_DASH || CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION KEY_EXISTS(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN number';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_KEY_EXISTS_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_KEY_EXISTS_DECLARATION(P_TABLENAME => P_TABLENAME) ||
+                 ' is ' || CHR(10) || 'LV_RESULT NUMBER;' || CHR(10);
+    LV_RESULT := LV_RESULT || 'begin';
+    LV_RESULT := LV_RESULT || CHR(10) || 'BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'select 1 into lv_result';
+    LV_RESULT := LV_RESULT || CHR(10) || ' from ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' WHERE ';
+    -- <WHERE parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --WHERE parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ';' || CHR(10) || 'EXCEPTION' ||
+                 CHR(10) || ' WHEN OTHERS THEN NULL;' || CHR(10);
+    LV_RESULT := LV_RESULT || 'END;LV_RESULT := nvl(LV_RESULT ,0);';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_UK_EXISTS_DECLARATION( --
+                                        P_TABLENAME     VARCHAR2
+                                       ,CONSTRAINT_NAME VARCHAR2
+                                        --
+                                        ) RETURN CLOB IS
+    LV_RESULT  CLOB;
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || CHR(10) || '-- ' || CONSTRAINT_NAME ||
+                  '_EXISTS' || CV_BEAUTY_DASH || CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION ' || CONSTRAINT_NAME ||
+                  '_EXISTS(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN UK_COLUMNS(P_TABLENAME, CONSTRAINT_NAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN number';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_UK_EXISTS_BODY( --
+                                 P_TABLENAME     VARCHAR2
+                                ,CONSTRAINT_NAME VARCHAR2
+                                 --
+                                 ) RETURN CLOB IS
+    LV_RESULT  CLOB;
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_UK_EXISTS_DECLARATION(P_TABLENAME     => P_TABLENAME
+                                             ,CONSTRAINT_NAME => CONSTRAINT_NAME) ||
+                 ' is ' || CHR(10) || 'LV_RESULT NUMBER;' || CHR(10);
+    LV_RESULT := LV_RESULT || 'begin';
+    LV_RESULT := LV_RESULT || CHR(10) || 'BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'select 1 into lv_result';
+    LV_RESULT := LV_RESULT || CHR(10) || ' from ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' WHERE ';
+    -- <WHERE parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN UK_COLUMNS(P_TABLENAME, CONSTRAINT_NAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --WHERE parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ';' || CHR(10) || 'EXCEPTION' ||
+                 CHR(10) || ' WHEN OTHERS THEN NULL;' || CHR(10);
+    LV_RESULT := LV_RESULT || 'END;LV_RESULT := nvl(LV_RESULT ,0);';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_GET_DESCRIPTION_DCLRTN(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- GET_DESCRIPTION' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION GET_DESCRIPTION(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_GET_DESCRIPTION_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT            CLOB; --VARCHAR2(32672);
+    DELIMITTER           VARCHAR2(10);
+    I                    NUMBER;
+    LV_TABLENAME         VARCHAR2(256) := UPPER(TRIM(P_TABLENAME));
+    LV_PERSIAN_TABLENAME VARCHAR2(256);
+  BEGIN
+    BEGIN
+      SELECT TRIM(C.COMMENTS)
+        INTO LV_PERSIAN_TABLENAME
+        FROM ALL_TAB_COMMENTS C
+       WHERE C.TABLE_NAME = UPPER(TRIM(P_TABLENAME))
+      --
+      ;
+    EXCEPTION
+      WHEN OTHERS THEN
+        NULL;
+    END;
+    LV_RESULT := LV_RESULT ||
+                 CREATE_GET_DESCRIPTION_DCLRTN(P_TABLENAME => LV_TABLENAME) ||
+                 ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' ||
+                 CHR(10);
+    LV_RESULT := LV_RESULT || 'begin' || CHR(10) || 'begin';
+    LV_RESULT := LV_RESULT || CHR(10) || 'select ' || CASE
+                   WHEN LV_TABLENAME = UPPER('MAM_ITEMS') THEN
+                    'T.COD_ITEM || '': '' || T.DES_ITEM'
+                   WHEN LV_TABLENAME = UPPER('MAM_PLANNERS') THEN
+                    'T.DES_MPLNR || '' به کاربري '' || MAM_FROM_FND_PKG.GET_FND_USERS(P_IDE_USER_USRS => T.COD_USER_MPLNR)'
+                   WHEN LV_TABLENAME = UPPER('MAM_SUB_INVENTORIES') THEN
+                    'T.NAM_SUB_INVENTORY_MSINV || '': '' || T.DES_MSINV'
+                   WHEN LV_TABLENAME = UPPER('MAM_ONHAND_QUANTITIES') THEN
+                    'MAM_ITEMS_CTRL_PKG.GET_DESCRIPTION(T.ITEM_ITEM_ID)|| '' در انبار '' || T.MSINV_NAM_SUB_INVENTORY_MSINV'
+                   WHEN LV_TABLENAME = UPPER('MAM_ITEM_SUB_INVENTORIES') THEN
+                    '''موقعيت تخصيصي به کالاي '' ||MAM_ITEMS_FLD_PKG.GET_COD_ITEM(P_ITEM_ID => T.ITEM_ITEM_ID) || '' انبار '' || T.MSINV_NAM_SUB_INVENTORY_MSINV || CASE WHEN T.MSLOC_SUB_INVENTORY_LOCATOR_ID IS NOT NULL THEN '' موقعيت '' || MAM_SUB_INVENTORYLCTRS_FLD_PKG.GET_COD_LOCATOR_MSLOC(P_SUB_INVENTORY_LOCATOR_ID => T.MSLOC_SUB_INVENTORY_LOCATOR_ID)END'
+                   ELSE
+                    'NULL'
+                 END || ' into lv_result ';
+  
+    LV_RESULT := LV_RESULT || CHR(10) || ' from ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' T WHERE ';
+    -- <WHERE parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(LV_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --WHERE parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ';' || CHR(10) || 'EXCEPTION' ||
+                 CHR(10) || ' WHEN OTHERS THEN ' || CHR(10) ||
+                 'LV_RESULT := ''{رکورد ' || LV_PERSIAN_TABLENAME ||
+                 ' شناسايي نشد}'';';
+    LV_RESULT := LV_RESULT || CHR(10) || 'END;' || CHR(10) ||
+                 'LV_RESULT:=MAM_FROM_FND_PKG.REPLACE_STRING(STRING_NAM => LV_RESULT);' ||
+                 CHR(10) || 'RETURN LV_RESULT;' || CHR(10) || 'end;' ||
+                 CHR(10);
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  /*
+    FUNCTION CREATE_CHECK_DATA_DECLARATION RETURN CLOB 
+     IS
+      LV_RESULT  CLOB; --VARCHAR2(32672);
+      DELIMITTER VARCHAR2(10);
+      I          NUMBER;
+    BEGIN
+      LV_RESULT  := LV_RESULT || '-- CHECK_DATA' || CV_BEAUTY_DASH || CHR(10);
+      LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_DATA(--' || CHR(10);
+      DELIMITTER := '';
+      I          := 1;
+      FOR C IN TABLE_COLUMNS(NULL)
+      LOOP
+        LV_RESULT  := LV_RESULT || DELIMITTER ||
+                      CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                      CREATE_PARAMETER_TYPE(C.COLUMN_NAME) || '--' ||
+                      TO_CHAR(I) || '--' || CHR(10);
+        DELIMITTER := ', ';
+        I          := I + 1;
+      END LOOP;
+      LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+      RETURN UPPER(TRIM(LV_RESULT));
+    END;
+  
+    FUNCTION CREATE_CHECK_DATA_BODY RETURN CLOB 
+     IS
+      LV_RESULT  CLOB; --VARCHAR2(32672);
+      DELIMITTER VARCHAR2(10);
+    BEGIN
+      LV_RESULT  := LV_RESULT || CREATE_CHECK_DATA_DECLARATION || ' is ' ||
+                    CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' || CHR(10) ||
+                    'begin';
+      LV_RESULT  := LV_RESULT || CHR(10) ||
+                    'if LV_RESULT is null then LV_RESULT:=CHECK_LOCK(--' ||
+                    CHR(10);
+      DELIMITTER := NULL;
+      FOR C IN PK_COLUMNS
+      LOOP
+          LV_RESULT  := LV_RESULT || DELIMITTER ||
+                        CREATE_PARAMETER_NAME(C.COLUMN_NAME);
+          DELIMITTER := ', ';
+      END LOOP;
+      LV_RESULT := LV_RESULT || CHR(10) || '--' || CHR(10) || '); end if;';
+      LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                   'end;';
+      RETURN UPPER(TRIM(LV_RESULT));
+    END;
+  */
+  FUNCTION CREATE_CHECK_LKP_DCL(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- CHECK_LOOKUPS' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_LOOKUPS';
+    DELIMITTER := '(--' || CHR(10);
+    I          := 1;
+    FOR C IN TABLE_LKP_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    FOR C IN TABLE_LKP_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT := LV_RESULT || ')';
+      EXIT;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ' RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_LKP_BDY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_CHECK_LKP_DCL(P_TABLENAME => P_TABLENAME) || ' is ' ||
+                 CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' || CHR(10) ||
+                 'begin' || CHR(10);
+    FOR C IN TABLE_LKP_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    'if lv_result is null then IF ' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) ||
+                    ' IS NOT NULL THEN LV_RESULT := MAM_FROM_FND_PKG.CHECK_LOOKUP_VALUE(P_TABLE  => ''' ||
+                    UPPER(TRIM(P_TABLENAME)) || ''' ,P_COLUMN => ''' ||
+                    UPPER(TRIM(C.COLUMN_NAME)) || ''' ,P_VALUE  => ' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) ||
+                    '); END IF;END IF;';
+      DELIMITTER := CHR(10);
+    END LOOP;
+  
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_LKP_IMPL(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+  BEGIN
+    LV_RESULT  := LV_RESULT ||
+                  'if lv_result is null then lv_result := CHECK_LOOKUPS';
+    DELIMITTER := '(--' || CHR(10);
+    FOR C IN TABLE_LKP_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' => ' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || CHR(10);
+      DELIMITTER := ', ';
+    END LOOP;
+    FOR C IN TABLE_LKP_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT := LV_RESULT || '--' || CHR(10) || ')';
+      EXIT;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ';' || CHR(10) || 'end if;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_MUST_FILLS_DCL(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- CHECK_MUST_FILLS' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_MUST_FILLS';
+    DELIMITTER := '(--' || CHR(10);
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT := LV_RESULT || ')';
+      EXIT;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ' RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_MUST_FILLS_BDY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT   CLOB; --VARCHAR2(32672);
+    DELIMITTER  VARCHAR2(10);
+    LV_COMMENTS VARCHAR2(1000);
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_CHECK_MUST_FILLS_DCL(P_TABLENAME => P_TABLENAME) ||
+                 ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' ||
+                 CHR(10) || 'begin' || CHR(10);
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      BEGIN
+        SELECT CC.COMMENTS
+          INTO LV_COMMENTS
+          FROM ALL_COL_COMMENTS CC
+         WHERE CC.TABLE_NAME = UPPER(TRIM(P_TABLENAME))
+           AND CC.COLUMN_NAME = C.COLUMN_NAME
+        --
+        ;
+      EXCEPTION
+        WHEN OTHERS THEN
+          NULL;
+      END;
+      LV_COMMENTS := NVL(LV_COMMENTS, C.COLUMN_NAME);
+      LV_RESULT := LV_RESULT || DELIMITTER || CASE
+                     WHEN NVL(C.NULLABLE, 'Y') = UPPER('Y') THEN
+                      '--'
+                   END || 'IF LV_RESULT IS NULL THEN IF ' ||
+                   CREATE_PARAMETER_NAME(C.COLUMN_NAME) ||
+                   ' IS  NULL THEN LV_RESULT := ''{فیلد ' --
+                   || LV_COMMENTS || ' نمی تواند تهی باشد}''; END IF;END IF;';
+      DELIMITTER  := CHR(10);
+    END LOOP;
+  
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_MUST_FILLS_IMPL(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB;
+    DELIMITTER VARCHAR2(10);
+  BEGIN
+    LV_RESULT  := LV_RESULT ||
+                  'if lv_result is null then lv_result := CHECK_MUST_FILLS';
+    DELIMITTER := '(--' || CHR(10);
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' => ' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || CHR(10);
+      DELIMITTER := ', ';
+    END LOOP;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT := LV_RESULT || '--' || CHR(10) || ');';
+      EXIT;
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || 'end if;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_ADD_DECLARATN(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- CHECK_B4_ADD' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_B4_ADD(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_ADD_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+    --DELIMITTER VARCHAR2(10);
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_CHECK_B4_ADD_DECLARATN(P_TABLENAME => P_TABLENAME) ||
+                 ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' ||
+                 CHR(10) || 'begin';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 CREATE_CHECK_LKP_IMPL(P_TABLENAME => P_TABLENAME);
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 CREATE_CHECK_MUST_FILLS_IMPL(P_TABLENAME => P_TABLENAME);
+    /*                  
+    LV_RESULT  := LV_RESULT || CHR(10) ||
+                  'if LV_RESULT is null then LV_RESULT:=CHECK_LOCK(--' ||
+                  CHR(10);
+    DELIMITTER := NULL;
+    FOR C IN PK_COLUMNS
+    LOOP
+        LV_RESULT  := LV_RESULT || DELIMITTER ||
+                      CREATE_PARAMETER_NAME(C.COLUMN_NAME);
+        DELIMITTER := ', ';
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || '--' || CHR(10) || '); end if;';
+    */
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_EDT_NOLOCK_DCL(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- CHECK_B4_EDIT' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_B4_EDIT_NO_LOCK(--' ||
+                  CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_EDIT_NOLCK_BDY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+    --DELIMITTER VARCHAR2(10);
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_CHECK_B4_EDT_NOLOCK_DCL(P_TABLENAME => P_TABLENAME) ||
+                 ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' ||
+                 CHR(10) || 'begin';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 CREATE_CHECK_LKP_IMPL(P_TABLENAME => P_TABLENAME);
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 CREATE_CHECK_MUST_FILLS_IMPL(P_TABLENAME => P_TABLENAME);
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_RMV_NOLCK_DCL(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- CHECK_B4_REMOVE' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_B4_REMOVE_NO_LOCK(--' ||
+                  CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_RMV_NOLCK_BD(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+    --DELIMITTER VARCHAR2(10);
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_CHECK_B4_RMV_NOLCK_DCL(P_TABLENAME => P_TABLENAME) ||
+                 ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' ||
+                 CHR(10) || 'begin';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  FUNCTION CREATE_CHECK_B4_EDIT_DECLARATN(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- CHECK_B4_EDIT' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_B4_EDIT(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_EDIT_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_CHECK_B4_EDIT_DECLARATN(P_TABLENAME => P_TABLENAME) ||
+                 ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' ||
+                 CHR(10) || 'begin';
+  
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'if lv_result is null then LV_RESULT:=' ||
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                 || '.CHECK_B4_EDIT_NO_LOCK(';
+    -- <parameters to check
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '=>' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    --parameters to check>
+    LV_RESULT := LV_RESULT || CHR(10) || '); end if;';
+  
+    LV_RESULT  := LV_RESULT || CHR(10) ||
+                  'if LV_RESULT is null then LV_RESULT:=CHECK_LOCK(--' ||
+                  CHR(10);
+    DELIMITTER := NULL;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME);
+      DELIMITTER := ', ';
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || '--' || CHR(10) || '); end if;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_REMOVE_DCLR(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- CHECK_B4_REMOVE' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION CHECK_B4_REMOVE(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_CHECK_B4_REMOVE_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_CHECK_B4_REMOVE_DCLR(P_TABLENAME => P_TABLENAME) ||
+                 ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' ||
+                 CHR(10) || 'begin';
+  
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 ' if lv_result is null then lv_result := ' ||
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                 || '.check_b4_remove_NO_LOCK(';
+    -- <CHECK_LOCK parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '=>' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ',';
+      I          := I + 1;
+    END LOOP;
+    --CHECK_LOCK parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ');end if;';
+  
+    LV_RESULT  := LV_RESULT || CHR(10) ||
+                  'if LV_RESULT is null then LV_RESULT:=CHECK_LOCK(--' ||
+                  CHR(10);
+    DELIMITTER := NULL;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME);
+      DELIMITTER := ', ';
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || '--' || CHR(10) || '); end if;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_INITIATOR_DECLARATION(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- INITIATOR' || CV_BEAUTY_DASH || CHR(10);
+    LV_RESULT  := LV_RESULT || 'function INITIATOR(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) ||
+                    ' IN OUT NOCOPY ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ')RETURN VARCHAR2 ';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_INITIATOR_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+    --DELIMITTER VARCHAR2(10);
+    I NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_INITIATOR_DECLARATION(P_TABLENAME => P_TABLENAME) ||
+                 ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' ||
+                 'begin';
+    LV_RESULT := LV_RESULT || CHR(10);
+    --DELIMITTER := '';
+    I := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      IF C.IS_PK = 1
+         AND NVL(C.IDENTITY_COLUMN, '-') != 'YES'
+      THEN
+        LV_RESULT := LV_RESULT || ' if ' ||
+                     CREATE_PARAMETER_NAME(C.COLUMN_NAME) ||
+                     ' is null then ' ||
+                     CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ':=' ||
+                     C.TABLE_NAME || '_seq.nextval;end if;';
+      ELSE
+        NULL;
+        /*
+        LV_RESULT := LV_RESULT || DELIMITTER ||
+                     CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ':=' ||
+                     CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ';' || '--' ||
+                     TO_CHAR(I) || CHR(10);
+        */
+      END IF;
+      --DELIMITTER := '';
+      I := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || 'return lv_result; end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_RETRIEVER_DECLARATION(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- RETRIEVER' || CV_BEAUTY_DASH || CHR(10);
+    LV_RESULT  := LV_RESULT || 'function retriever(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT := LV_RESULT || DELIMITTER ||
+                   CREATE_PARAMETER_NAME(C.COLUMN_NAME) || CASE
+                     WHEN C.IS_PK = 1 THEN
+                      ' '
+                     ELSE
+                      ' OUT '
+                   END || CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                   TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ')RETURN VARCHAR2 ';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_RETRIEVER_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT ||
+                  CREATE_RETRIEVER_DECLARATION(P_TABLENAME => P_TABLENAME) ||
+                  ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' ||
+                  'begin';
+    LV_RESULT  := LV_RESULT || CHR(10);
+    LV_RESULT  := LV_RESULT || 'begin' || CHR(10);
+    LV_RESULT  := LV_RESULT || 'select ' || CHR(10);
+    DELIMITTER := '';
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, C_IS_NOT_PK)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER || C.COLUMN_NAME || CHR(10);
+      DELIMITTER := ', ';
+    END LOOP;
+    LV_RESULT := LV_RESULT || ' into ' || CHR(10);
+  
+    DELIMITTER := '';
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, C_IS_NOT_PK)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || CHR(10);
+      DELIMITTER := ', ';
+    END LOOP;
+  
+    LV_RESULT  := LV_RESULT || 'from ' ||
+                  SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                  P_TABLENAME || ' where ' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || CHR(10);
+      DELIMITTER := 'and ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || '-- ' || CHR(10) || ';' || CHR(10);
+  
+    LV_RESULT := LV_RESULT ||
+                 'exception when others then lv_result:=''{رکوردي به شناسه ' || '' ||
+                 ' از جدول ' ||
+                 TABLE_COMMENT_FUN(P_TABLENAME => P_TABLENAME) ||
+                 ' قابل شناسايي نيست}''; end;' || CHR(10);
+    LV_RESULT := LV_RESULT || 'return lv_result; end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_ADD_DECLARATION(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- add' || CV_BEAUTY_DASH || CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION add(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT := LV_RESULT || DELIMITTER ||
+                   CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                  --
+                   CASE
+                     WHEN C.IS_PK = 1 THEN
+                      'OUT '
+                   END ||
+                  --
+                   CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                   TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  FUNCTION CREATE_ADD_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT ||
+                  CREATE_ADD_DECLARATION(P_TABLENAME => P_TABLENAME) ||
+                  ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';';
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || ':=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ';--' ||
+                    TO_CHAR(I) || CHR(10);
+      DELIMITTER := '';
+      I          := I + 1;
+    END LOOP;
+  
+    LV_RESULT := LV_RESULT || CHR(10) || 'begin' || CHR(10);
+  
+    LV_RESULT := LV_RESULT || 'if LV_RESULT is null then lv_result:=' ||
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME)
+                 || '.initiator(--';
+    -- <parameters to initiator
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '=>' ||
+                    CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    --parameters to initiator>
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 ');end if; if LV_RESULT is null then';
+  
+    LV_RESULT := LV_RESULT || CHR(10) || 'LV_RESULT:=';
+    LV_RESULT := LV_RESULT || CREATE_PACKAGE_NAME( --
+                                                  P_PREFIX  => NULL
+                                                 ,P_INFIX   => P_TABLENAME
+                                                 ,P_POSTFIX => '_CTRL_PKG'
+                                                  --
+                                                  )
+                --     CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                 || '.CHECK_B4_ADD(--';
+    -- <parameters to check
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '=>' ||
+                    CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    --parameters to check>
+    LV_RESULT := LV_RESULT || CHR(10) || '); end if;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'IF (LV_RESULT IS NULL) THEN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'INSERT INTO ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || CHR(10) || '(';
+    -- <insert fields
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    --insert fields>
+    LV_RESULT := LV_RESULT || CHR(10) || ')' || CHR(10) || 'VALUES' ||
+                 CHR(10) || '(';
+    -- <insert parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER ||
+                    CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    --insert parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ')';
+    --***************************************************************
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      IF C.IDENTITY_COLUMN = 'YES'
+      THEN
+        LV_RESULT := LV_RESULT || CHR(10) || 'RETURNING ' || C.COLUMN_NAME || ' ' ||
+                     ' INTO ' || CREATE_PARAMETER_NAME(C.COLUMN_NAME);
+      END IF;
+    END LOOP;
+  
+    --***************************************************************
+    LV_RESULT := LV_RESULT || ';';
+  
+    -- <fill return key parameters
+    --DELIMITTER := '';
+    I := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT := LV_RESULT || CHR(10) ||
+                   CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ':=' ||
+                   CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || ';';
+      --DELIMITTER := '';
+      I := I + 1;
+    END LOOP;
+    --fill return key parameters>
+  
+    LV_RESULT := LV_RESULT || 'EXCEPTION' || CHR(10) ||
+                 ' WHEN OTHERS THEN ' || CHR(10) ||
+                 'LV_RESULT := ''{رکوردي در ' ||
+                 TABLE_COMMENT_FUN(P_TABLENAME => P_TABLENAME) ||
+                 ' درج نشد: ''||sqlerrm||''}'';' || CHR(10) || 'END;' ||
+                 CHR(10) || 'END IF;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_REMOVE_DECLARATION(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- remove' || CV_BEAUTY_DASH || CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION remove(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_REMOVE_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_REMOVE_DECLARATION(P_TABLENAME => P_TABLENAME) ||
+                 ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' ||
+                 CHR(10) || 'begin';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 ' if lv_result is null then lv_result := ' ||
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                 || '.check_b4_remove(';
+    -- <CHECK_LOCK parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '=>' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ',';
+      I          := I + 1;
+    END LOOP;
+    --CHECK_LOCK parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ');end if;';
+    LV_RESULT := LV_RESULT || CHR(10) || ' if lv_result is null then BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'DELETE ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' WHERE ';
+    -- <REMOVE parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --REMOVE parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ';' || CHR(10) || 'EXCEPTION' ||
+                 CHR(10) || ' WHEN OTHERS THEN ' || CHR(10) ||
+                 'LV_RESULT := ''{به دليل استفاده از رکورد در ديگر جداول، حذف آن از ' ||
+                 TABLE_COMMENT_FUN(P_TABLENAME => P_TABLENAME) ||
+                 ' امکانپذير نيست: ''||sqlerrm||''}'';' || CHR(10) ||
+                 'END; end if;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_REMOVE_IMPLEMENTATION ---------------------------------------------------------------------------
+  FUNCTION CREATE_REMOVE_IMPLEMENTATION(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_REMOVE_DECLARATION(P_TABLENAME => P_TABLENAME) ||
+                 ' is ' || CHR(10) || 'LV_RESULT VARCHAR2(1000):='''';' ||
+                 CHR(10) || 'begin';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 ' if lv_result is null then lv_result := ' ||
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_app_PKG'
+                                     --
+                                     ) || '.remove(';
+    -- <CHECK_LOCK parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '=>' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ',';
+      I          := I + 1;
+    END LOOP;
+    --CHECK_LOCK parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ');end if;';
+  
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_EDIT_DECLARATION ------------------------------------------------------------------------------------------------
+  FUNCTION CREATE_EDIT_DECLARATION(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- edit' || CV_BEAUTY_DASH || CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION edit(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  FUNCTION CREATE_EDIT_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT ||
+                  CREATE_EDIT_DECLARATION(P_TABLENAME => P_TABLENAME) ||
+                  ' is ' || CHR(10);
+    LV_RESULT  := LV_RESULT || 'LV_RESULT VARCHAR2(1000):='''';' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT := LV_RESULT || DELIMITTER ||
+                   CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || ' ' ||
+                   CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || CASE
+                     WHEN C.IS_PK = 1 THEN
+                      ':=' || CREATE_PARAMETER_NAME(C.COLUMN_NAME)
+                   END || ';--' || TO_CHAR(I) || CHR(10);
+      DELIMITTER := '';
+      I          := I + 1;
+    END LOOP;
+  
+    LV_RESULT := LV_RESULT || CHR(10) || 'begin' || CHR(10);
+  
+    LV_RESULT := LV_RESULT || 'if lv_result is null then lv_result:=' ||
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME)
+                 || '.retriever(--';
+    -- <parameters to initiator
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '=>' ||
+                    CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    --parameters to initiator>
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 ');end if; if lv_result is null then ';
+  
+    --DELIMITTER := '';
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, C_IS_NOT_PK)
+    LOOP
+      IF C.IS_PK != 1
+      THEN
+        LV_RESULT := LV_RESULT || CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) ||
+                     ' :=NVL(' || CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ',' ||
+                     CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || ');--' ||
+                     CHR(10);
+        --DELIMITTER := '';
+      END IF;
+    END LOOP;
+  
+    LV_RESULT := LV_RESULT || 'end if; ';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'if lv_result is null then LV_RESULT:=' ||
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_CTRL_PKG'
+                                     --
+                                     )
+                --                  CREATE_CTRL_PACKAGE_NAME(P_TABLENAME) 
+                 || '.CHECK_B4_EDIT(';
+    -- <parameters to check
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '=>' ||
+                    CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    --parameters to check>
+    LV_RESULT := LV_RESULT || CHR(10) || '); end if;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'IF (LV_RESULT IS NULL) THEN' ||
+                 CHR(10) || 'BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'UPDATE ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' SET ';
+    -- <edit fields
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, NULL)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    --edit fields>
+    LV_RESULT := LV_RESULT || CHR(10) || ' WHERE ';
+    -- <edit parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=';
+      LV_RESULT  := LV_RESULT || CHR(10) ||
+                    CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --edit parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ';' || CHR(10) || 'EXCEPTION' ||
+                 CHR(10) || ' WHEN OTHERS THEN ' || CHR(10) ||
+                 'LV_RESULT := ''{تغييري در رکورد صورت نگرفت: ''||sqlerrm||''}'';' ||
+                 CHR(10) || 'END;' || CHR(10) || 'END IF;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  FUNCTION CREATE_CREATE_FILTER_VIEW_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+  BEGIN
+    LV_RESULT := LV_RESULT || '-- CREATE_FILTER_VIEW' || CV_BEAUTY_DASH ||
+                 CHR(10);
+    LV_RESULT := LV_RESULT || 'PROCEDURE CREATE_FILTER_VIEW(--' || CHR(10);
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'P_FILTER_VIEW_NAME VARCHAR2, COMMA_SEPARATED_IDS VARCHAR2) is';
+    LV_RESULT := LV_RESULT || CHR(10) || 'LV_SQL VARCHAR2(32767);';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'C_DATE CONSTANT VARCHAR2(100) := TO_CHAR(SYSDATE,''RRRR/MM/DD HH24:MI:SS'',''NLS_CALENDAR=PERSIAN'');';
+    LV_RESULT := LV_RESULT || CHR(10) || 'BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'LV_SQL := ''CREATE OR REPLACE VIEW '' || P_FILTER_VIEW_NAME ||'' AS ''';
+    LV_RESULT := LV_RESULT || CHR(10) || '|| CHR(10)||''SELECT ''';
+    -- <edit fields
+    DELIMITTER := '||''';
+    -----
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME ||
+                    ' AS FILTER_ID_''';
+      DELIMITTER := ' || '',';
+    END LOOP;
+    -----
+    FOR C IN TABLE_COLUMNS(P_TABLENAME, C_IS_NOT_PK)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '''';
+      DELIMITTER := ' || '',';
+    END LOOP;
+    --edit fields>
+    LV_RESULT := LV_RESULT || CHR(10) || '|| '' FROM ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' WHERE ''';
+    -- <where clause
+    DELIMITTER := '||';
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || '''' ||
+                    C.COLUMN_NAME ||
+                    ' IN(-1''|| COMMA_SEPARATED_IDS ||'')''';
+      DELIMITTER := '||'' AND ''';
+    END LOOP;
+    --where clause>
+    LV_RESULT := LV_RESULT || CHR(10) || '--' || CHR(10) ||
+                 '||CHR(10)||CHR(47)||CHR(42)||C_DATE||CHR(42)||CHR(47);';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'MAM_EXECUTE_IMMEDIATE_PKG.EXEC_IMDT(LV_SQL);';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'LV_SQL := ''COMMENT ON  TABLE ''|| P_FILTER_VIEW_NAME ||'' IS ' ||
+                 CHR(39) || CHR(39) || 'فيلتر ' ||
+                 TABLE_COMMENT_FUN(P_TABLENAME => P_TABLENAME) || CHR(39) ||
+                 CHR(39) || CHR(39) || ';' || CHR(10) ||
+                 'MAM_EXECUTE_IMMEDIATE_PKG.EXEC_IMDT(LV_SQL);';
+    LV_RESULT := LV_RESULT || CHR(10) || 'END;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_ADD_TO_FILTER_VIEW_DCLR(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- ADD_TO_FILTER_VIEW' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'PROCEDURE ADD_TO_FILTER_VIEW(--' || CHR(10);
+    LV_RESULT  := LV_RESULT || 'P_FILTER_VIEW_NAME IN OUT VARCHAR2';
+    DELIMITTER := ',';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') ';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  FUNCTION CREATE_ADD_TO_FILTER_VIEW_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_ADD_TO_FILTER_VIEW_DCLR(P_TABLENAME => P_TABLENAME) ||
+                 ' is';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'TYPE ITEM_FILTER_CURSOR_TYPE IS REF CURSOR;';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'LV_FILTER  ITEM_FILTER_CURSOR_TYPE;' || CHR(10) ||
+                 'LV_SQL     VARCHAR2(4000);' || CHR(10) ||
+                 'LV_EXISTS  NUMBER;';
+    -- <local variables
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT := LV_RESULT || CHR(10) ||
+                   CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || ' ' ||
+                   CREATE_COLUMN_TYPE(P_TABLENAME, C.COLUMN_NAME) || ';';
+    END LOOP;
+    --local variables>
+    LV_RESULT := LV_RESULT || CHR(10) || 'BEGIN' || CHR(10) ||
+                 'IF P_FILTER_VIEW_NAME IS NULL THEN' || CHR(10) ||
+                 'P_FILTER_VIEW_NAME := MAM_EXECUTE_IMMEDIATE_PKG.GENERATE_VIEW_NAME;';
+    -- <parameters
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT := LV_RESULT || CHR(10) || 'LV_SQL:=LV_SQL' || '||'',''||' ||
+                   CREATE_PARAMETER_NAME(C.COLUMN_NAME);
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || ';';
+    --parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || 'ELSE';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'OPEN LV_FILTER FOR ''SELECT DISTINCT ''';
+    -- <select clause
+    DELIMITTER := '||';
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || '''' ||
+                   --C.COLUMN_NAME
+                    'FILTER_ID_' || '''';
+      DELIMITTER := '||'' ,''';
+    END LOOP;
+    --select clause>
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 '||'' FROM '' || P_FILTER_VIEW_NAME;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'LOOP';
+    LV_RESULT := LV_RESULT || CHR(10) || 'FETCH LV_FILTER';
+    LV_RESULT := LV_RESULT || CHR(10) || 'INTO ';
+    -- <local variables
+    DELIMITTER := '';
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER ||
+                    CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME);
+      DELIMITTER := ',';
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || ';';
+    --local variables>
+    LV_RESULT := LV_RESULT || CHR(10) || 'EXIT WHEN LV_FILTER%NOTFOUND;';
+    -- <parameters
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT := LV_RESULT || CHR(10) || 'LV_SQL:=LV_SQL' || '||'',''||' ||
+                   CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME);
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || ';';
+    --parameters>
+  
+    LV_RESULT := LV_RESULT || CHR(10) || 'END LOOP;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'CLOSE LV_FILTER;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'SELECT 1';
+    LV_RESULT := LV_RESULT || CHR(10) || 'INTO LV_EXISTS';
+    LV_RESULT := LV_RESULT || CHR(10) || 'FROM DUAL';
+    LV_RESULT := LV_RESULT || CHR(10) || 'WHERE EXISTS (SELECT NULL FROM ';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' T ';
+    LV_RESULT := LV_RESULT || CHR(10) || 'WHERE';
+    -- <parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=';
+      LV_RESULT  := LV_RESULT || CHR(10) ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ');';
+    LV_RESULT := LV_RESULT || CHR(10) || 'EXCEPTION';
+    LV_RESULT := LV_RESULT || CHR(10) || 'WHEN NO_DATA_FOUND THEN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'NULL;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'END;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'LV_EXISTS := NVL(LV_EXISTS, 0);';
+    LV_RESULT := LV_RESULT || CHR(10) || 'IF LV_EXISTS = 1';
+    LV_RESULT := LV_RESULT || CHR(10) || 'THEN';
+    -- <parameters
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT := LV_RESULT || CHR(10) || 'LV_SQL:=LV_SQL' || '||'',''||' ||
+                   CREATE_PARAMETER_NAME(C.COLUMN_NAME);
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || ';';
+    --parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || 'END IF;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'END IF;';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'CREATE_FILTER_VIEW(P_FILTER_VIEW_NAME, LV_SQL);';
+    LV_RESULT := LV_RESULT || CHR(10) || 'END;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_REMOVEFROMFILTERVIW_DC(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- REMOVE_FROM_FILTER_VIEW' ||
+                  CV_BEAUTY_DASH || CHR(10);
+    LV_RESULT  := LV_RESULT || 'PROCEDURE REMOVE_FROM_FILTER_VIEW(--' ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'P_FILTER_VIEW_NAME VARCHAR2';
+    DELIMITTER := ',';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') ';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_REMOVEFROMFILTERVIW_BD(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+  BEGIN
+    LV_RESULT := LV_RESULT ||
+                 CREATE_REMOVEFROMFILTERVIW_DC(P_TABLENAME => P_TABLENAME) ||
+                 ' is';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'TYPE ITEM_FILTER_CURSOR_TYPE IS REF CURSOR;';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'LV_FILTER  ITEM_FILTER_CURSOR_TYPE;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'LV_SQL     VARCHAR2(4000);';
+    --LV_RESULT := LV_RESULT || CHR(10) || 'LV_EXISTS  NUMBER;';
+    -- <local variables
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT := LV_RESULT || CHR(10) ||
+                   CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || ' ' ||
+                   CREATE_COLUMN_TYPE(P_TABLENAME, C.COLUMN_NAME) || ';';
+    END LOOP;
+    --local variables>
+    LV_RESULT := LV_RESULT || CHR(10) || 'BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'OPEN LV_FILTER FOR ''SELECT DISTINCT ''';
+    -- <select clause
+    DELIMITTER := '||';
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || '''' ||
+                   --C.COLUMN_NAME 
+                    'FILTER_ID_' || '''';
+      DELIMITTER := '||'' ,''';
+    END LOOP;
+    --select clause>
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 '||'' FROM '' || P_FILTER_VIEW_NAME;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'LOOP';
+    LV_RESULT := LV_RESULT || CHR(10) || 'FETCH LV_FILTER';
+    LV_RESULT := LV_RESULT || CHR(10) || 'INTO ';
+    -- <local variables
+    DELIMITTER := '';
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER ||
+                    CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME);
+      DELIMITTER := ',';
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || ';';
+    --local variables>
+    LV_RESULT := LV_RESULT || CHR(10) || 'EXIT WHEN LV_FILTER%NOTFOUND;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'IF ';
+    -- <parameters
+    DELIMITTER := '';
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER ||
+                    CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME) || '!=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME);
+      DELIMITTER := ' AND ';
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || 'THEN';
+    -- <parameters
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT := LV_RESULT || CHR(10) || 'LV_SQL:=LV_SQL' || '||'',''||' ||
+                   CREATE_LOCAL_VARIABLE_NAME(C.COLUMN_NAME);
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || ';';
+    --parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || 'END IF;';
+  
+    LV_RESULT := LV_RESULT || CHR(10) || 'END LOOP;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'CLOSE LV_FILTER;';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'CREATE_FILTER_VIEW(P_FILTER_VIEW_NAME, LV_SQL);';
+    LV_RESULT := LV_RESULT || CHR(10) || 'END;';
+  
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  FUNCTION CREATE_DROP_FILTER_VIEW_DECLAR RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+  BEGIN
+    LV_RESULT := LV_RESULT || '-- DROP_FILTER_VIEW' || CV_BEAUTY_DASH ||
+                 CHR(10);
+    LV_RESULT := LV_RESULT || 'PROCEDURE DROP_FILTER_VIEW(--' || CHR(10);
+    LV_RESULT := LV_RESULT || 'P_FILTER_VIEW_NAME IN OUT VARCHAR2' ||
+                 CHR(10);
+    LV_RESULT := LV_RESULT || '--' || CHR(10);
+    LV_RESULT := LV_RESULT || ') ';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  FUNCTION CREATE_DROP_FILTER_VIEW_BODY RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+  BEGIN
+    LV_RESULT := LV_RESULT || CREATE_DROP_FILTER_VIEW_DECLAR || ' is';
+    LV_RESULT := LV_RESULT || CHR(10) || 'LV_SQL    VARCHAR2(4000);';
+    LV_RESULT := LV_RESULT || CHR(10) || 'LV_EXISTS NUMBER;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'SELECT 1';
+    LV_RESULT := LV_RESULT || CHR(10) || 'INTO LV_EXISTS';
+    LV_RESULT := LV_RESULT || CHR(10) || 'FROM DUAL';
+    LV_RESULT := LV_RESULT || CHR(10) || 'WHERE EXISTS (SELECT NULL';
+    LV_RESULT := LV_RESULT || CHR(10) || 'FROM ALL_VIEWS V';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'WHERE V.VIEW_NAME = UPPER(P_FILTER_VIEW_NAME));';
+    LV_RESULT := LV_RESULT || CHR(10) || 'EXCEPTION';
+    LV_RESULT := LV_RESULT || CHR(10) || 'WHEN NO_DATA_FOUND THEN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'NULL;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'END;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'LV_EXISTS := NVL(LV_EXISTS, 0);';
+    LV_RESULT := LV_RESULT || CHR(10) || 'IF LV_EXISTS = 1';
+    LV_RESULT := LV_RESULT || CHR(10) || 'THEN';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'LV_SQL := ''DROP VIEW '' || P_FILTER_VIEW_NAME;';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'MAM_EXECUTE_IMMEDIATE_PKG.EXEC_IMDT(LV_SQL);';
+    LV_RESULT := LV_RESULT || CHR(10) || 'END IF;' || CHR(10) || 'END;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  FUNCTION CREATE_COUNT_FILTER_RECORDS_DC RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+  BEGIN
+    LV_RESULT := LV_RESULT || '-- COUNT_FILTER_RECORDS' || CV_BEAUTY_DASH ||
+                 CHR(10);
+    LV_RESULT := LV_RESULT || 'FUNCTION COUNT_FILTER_RECORDS(--' || CHR(10);
+    LV_RESULT := LV_RESULT || 'P_FILTER_VIEW_NAME IN OUT VARCHAR2' ||
+                 CHR(10);
+    LV_RESULT := LV_RESULT || '--' || CHR(10);
+    LV_RESULT := LV_RESULT || ')  RETURN NUMBER ';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  FUNCTION CREATE_COUNT_FILTER_RECORDS_BD RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+  BEGIN
+    LV_RESULT := LV_RESULT || CREATE_COUNT_FILTER_RECORDS_DC || ' is ';
+    LV_RESULT := LV_RESULT || CHR(10) || 'LV_SQL VARCHAR2(200);';
+    LV_RESULT := LV_RESULT || CHR(10) || 'LV_CNT NUMBER;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'PRAGMA AUTONOMOUS_TRANSACTION;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) ||
+                 'LV_SQL := '' SELECT COUNT(1) FROM '' || P_FILTER_VIEW_NAME;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'EXECUTE IMMEDIATE LV_SQL';
+    LV_RESULT := LV_RESULT || CHR(10) || 'INTO LV_CNT;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'EXCEPTION';
+    LV_RESULT := LV_RESULT || CHR(10) || 'WHEN OTHERS THEN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'NULL;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'END;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'LV_CNT := NVL(LV_CNT, 0);';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_CNT;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'END;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  /**********************************************************************************/
+  /**********************************************************************************/
+  /**********************************************************************************/
+  /**********************************************************************************/
+  -- CREATE_UPDATE_ATTACH_ID_DCL ------------------------------------------------------------------------------------------------
+  FUNCTION CREATE_UPDATE_ATTACH_ID_DCL(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || '-- UPDATE_ATTACH_ID' || CV_BEAUTY_DASH ||
+                  CHR(10);
+    LV_RESULT  := LV_RESULT || 'FUNCTION UPDATE_ATTACH_ID(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' ' ||
+                    CREATE_PARAMETER_TYPE(P_TABLENAME, C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--' || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ', P_ATTACH_ID ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || '.ATTACH_ID%type';
+    LV_RESULT := LV_RESULT || ') RETURN VARCHAR2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_UPDATE_ATTACH_ID_BODY ------------------------------------------------------------------------------------------------
+  FUNCTION CREATE_UPDATE_ATTACH_ID_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT ||
+                  CREATE_UPDATE_ATTACH_ID_DCL(P_TABLENAME => P_TABLENAME) ||
+                  ' is ' || CHR(10);
+    LV_RESULT  := LV_RESULT || 'LV_RESULT VARCHAR2(1000):='''';';
+    DELIMITTER := '';
+    I          := 1;
+  
+    LV_RESULT := LV_RESULT || CHR(10) || 'begin';
+  
+    LV_RESULT  := LV_RESULT || CHR(10) ||
+                  'if LV_RESULT is null then LV_RESULT:=' ||
+                  CREATE_PACKAGE_NAME( --
+                                      P_PREFIX  => NULL
+                                     ,P_INFIX   => P_TABLENAME
+                                     ,P_POSTFIX => '_CTRL_PKG'
+                                      --
+                                      ) || '.CHECK_LOCK(--' || CHR(10);
+    DELIMITTER := NULL;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '=>' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME);
+      DELIMITTER := ', ';
+    END LOOP;
+    LV_RESULT := LV_RESULT || CHR(10) || '--' || CHR(10) || '); end if;';
+  
+    LV_RESULT := LV_RESULT || CHR(10) || 'IF (LV_RESULT IS NULL) THEN' ||
+                 CHR(10) || 'BEGIN';
+    LV_RESULT := LV_RESULT || CHR(10) || 'UPDATE ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' SET attach_id =p_attach_id';
+    -- <edit fields
+    LV_RESULT := LV_RESULT || CHR(10) || ' WHERE ';
+    -- <edit parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --edit parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ';' || CHR(10) || 'EXCEPTION' ||
+                 CHR(10) || ' WHEN OTHERS THEN ' || CHR(10) ||
+                 'LV_RESULT := ''{تغييري در شناسه مستند پيوست صورت نگرفت: ''||sqlerrm||''}'';' ||
+                 CHR(10) || 'END;' || CHR(10) || 'END IF;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_UPDATE_ATTACH_ID_DCL ------------------------------------------------------------------------------------------------
+  FUNCTION CREATE_UPDATE_ATTACH_ID_IMPL(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT || 'UPDATE_ATTACH_ID(--' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || ' => ' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ', P_ATTACH_ID => P_ATTACH_ID' || CHR(10) || '--' ||
+                 CHR(10) || ');';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_UPDATE_ATTACH_ID_BODY ------------------------------------------------------------------------------------------------
+  FUNCTION CREATE_UPDATE_ATTACH_ID_WRP_BD(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT  CLOB; --VARCHAR2(32672);
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT  := LV_RESULT ||
+                  CREATE_UPDATE_ATTACH_ID_DCL(P_TABLENAME => P_TABLENAME) ||
+                  ' is ' || CHR(10);
+    DELIMITTER := '';
+    I          := 1;
+    LV_RESULT  := LV_RESULT || CHR(10) || 'begin';
+  
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN ' ||
+                 CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_app_PKG'
+                                     --
+                                     ) || '.' ||
+                 CREATE_UPDATE_ATTACH_ID_IMPL(P_TABLENAME => P_TABLENAME) ||
+                 CHR(10) || 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_MTC_PACKAGE_DECLARATN -------------------------------------------------
+  FUNCTION CREATE_MTC_PACKAGE_DECLARATN( --
+                                        P_TABLENAME  VARCHAR2
+                                       ,SPEC_OR_BODY VARCHAR2
+                                        --
+                                        ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(100);
+  BEGIN
+    IF UPPER(TRIM(NVL(SPEC_OR_BODY, 'spec'))) = UPPER(TRIM('spec'))
+    THEN
+      LV_RESULT := 'CREATE PACKAGE ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_MTc_PKG'
+                                       --
+                                       )
+                  --       CREATE_FLD_PACKAGE_NAME(P_TABLENAME) 
+                   || ' IS';
+    ELSE
+      LV_RESULT := 'CREATE PACKAGE body ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_MTc_PKG'
+                                       --
+                                       )
+                  --                    CREATE_FLD_PACKAGE_NAME(P_TABLENAME)
+                  --
+                   || ' IS';
+    END IF;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_MTC_FUN_DCL ---------------------------------------------------------
+  FUNCTION CREATE_MTC_FUN_DCL( --
+                              P_TABLENAME   VARCHAR2
+                             ,P_COLUMN_NAME VARCHAR2
+                             ,P_PK_COUNT    NUMBER
+                              --
+                              ) RETURN CLOB IS
+    LV_RESULT  CLOB;
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := 'FUNCTION ' || CREATE_FPV_NAME('CHK_', P_COLUMN_NAME, NULL) || CASE
+                   WHEN P_PK_COUNT = 1 THEN
+                    '('
+                   ELSE
+                    '(--' || CHR(10)
+                 END;
+    DELIMITTER := '';
+    I          := 1;
+    FOR C1 IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT := LV_RESULT || DELIMITTER ||
+                   CREATE_PARAMETER_NAME(C1.COLUMN_NAME) || ' ' ||
+                   CREATE_PARAMETER_TYPE(P_TABLENAME, C1.COLUMN_NAME) || CASE
+                     WHEN P_PK_COUNT = 1 THEN
+                      ''
+                     ELSE
+                      '--' || TO_CHAR(I) || '--' || CHR(10)
+                   END;
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN varchar2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_MT_CHECK_FUN_BODY --------------------------------------------------------
+  FUNCTION CREATE_MTC_FUN_BODY( --
+                               P_TABLENAME   VARCHAR2
+                              ,P_COLUMN_NAME VARCHAR2
+                              ,P_NULLABLE    VARCHAR2
+                               --
+                               ) RETURN CLOB IS
+    LV_RESULT  CLOB;
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT || 'LV_RESULT VARCHAR2(1000);' || CHR(10);
+    LV_RESULT := LV_RESULT || 'begin ';
+    IF P_NULLABLE = 'N'
+    THEN
+      LV_RESULT := LV_RESULT || 'lv_result:=''{فیلد ' ||
+                   FIELD_COMMENT_FUN( --
+                                     P_TABLENAME   => P_TABLENAME
+                                    ,P_COLUMN_NAME => P_COLUMN_NAME
+                                     --
+                                     ) || ' نمیتواند تهی باشد}'';';
+    ELSE
+      LV_RESULT := LV_RESULT || 'NULL;';
+      LV_RESULT := LV_RESULT ||
+                   '--if lv_result is null then lv_result:=''{}''; end if;';
+    END IF;
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_MTC_FUN_IMPL ---------------------------------------------------------
+  FUNCTION CREATE_MTC_FUN_IMPL( --
+                               P_TABLENAME   VARCHAR2
+                              ,P_COLUMN_NAME VARCHAR2
+                              ,P_PK_COUNT    NUMBER
+                               --
+                               ) RETURN CLOB IS
+    LV_RESULT  CLOB;
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := CREATE_PACKAGE_NAME( --
+                                     P_PREFIX  => NULL
+                                    ,P_INFIX   => P_TABLENAME
+                                    ,P_POSTFIX => '_MTc_PKG'
+                                     --
+                                     ) || '.' ||
+                 CREATE_FPV_NAME('CHK_', P_COLUMN_NAME, NULL) || CASE
+                   WHEN P_PK_COUNT = 1 THEN
+                    '('
+                   ELSE
+                    '(--' || CHR(10)
+                 END;
+    DELIMITTER := '';
+    I          := 1;
+    FOR C1 IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || DELIMITTER ||
+                    CREATE_PARAMETER_NAME(C1.COLUMN_NAME) || ' => ' ||
+                    CREATE_PARAMETER_NAME(C1.COLUMN_NAME) || CHR(10);
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || CASE
+                   WHEN P_PK_COUNT = 1 THEN
+                    ');'
+                   ELSE
+                    '--' || CHR(10) || ');'
+                 END;
+  
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_MTC_PKG_SPEC -----------------------
+  FUNCTION CREATE_MTC_PKG_SPEC(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB;
+    I         NUMBER;
+  BEGIN
+    I := 1;
+    FOR C IN TABLE_COLUMNS_MT(P_TABLENAME, NULL)
+    LOOP
+      IF NVL(C.IS_PK, 0) != 1
+      THEN
+        LV_RESULT := LV_RESULT || '-- MTC_' || C.COLUMN_NAME ||
+                     LPAD('-', 30, '-') || CV_BEAUTY_DASH || CHR(10);
+        LV_RESULT := LV_RESULT || CREATE_MTC_FUN_DCL( --
+                                                     P_TABLENAME
+                                                    ,C.COLUMN_NAME
+                                                    ,C.PK_COUNT
+                                                     --
+                                                     ) || ';--' ||
+                     TO_CHAR(I) || '--' || CHR(10);
+      END IF;
+      I := I + 1;
+    END LOOP;
+    --
+  
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_MTC_PKG_BODY ----------------------------------------------------------
+  FUNCTION CREATE_MTC_PKG_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB;
+    I         NUMBER;
+  BEGIN
+    I := 1;
+    FOR C IN TABLE_COLUMNS_MT(P_TABLENAME, NULL)
+    LOOP
+      IF NVL(C.IS_PK, 0) != 1
+      THEN
+        LV_RESULT := LV_RESULT || '-- CHK_' || C.COLUMN_NAME ||
+                     CV_BEAUTY_DASH || CHR(10);
+      
+        LV_RESULT := LV_RESULT || CREATE_MTC_FUN_DCL( --
+                                                     P_TABLENAME
+                                                    ,C.COLUMN_NAME
+                                                    ,C.PK_COUNT
+                                                     --
+                                                     ) || UPPER(' is ') ||
+                     CHR(10) || CREATE_MTC_FUN_BODY( --
+                                                    P_TABLENAME
+                                                   ,C.COLUMN_NAME
+                                                   ,C.NULLABLE
+                                                    --
+                                                    ) || CHR(10);
+      END IF;
+      I := I + 1;
+    END LOOP;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+
+  -- CREATE_MT_PACKAGE_DECLARATN -------------------------------------------------
+  FUNCTION CREATE_MT_PACKAGE_DECLARATN( --
+                                       P_TABLENAME  VARCHAR2
+                                      ,SPEC_OR_BODY VARCHAR2
+                                       --
+                                       ) RETURN CLOB IS
+    LV_RESULT VARCHAR2(100);
+  BEGIN
+    IF UPPER(TRIM(NVL(SPEC_OR_BODY, 'spec'))) = UPPER(TRIM('spec'))
+    THEN
+      LV_RESULT := 'CREATE PACKAGE ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_MT_PKG'
+                                       --
+                                       ) || ' IS';
+    ELSE
+      LV_RESULT := 'CREATE PACKAGE body ' ||
+                   CREATE_PACKAGE_NAME( --
+                                       P_PREFIX  => NULL
+                                      ,P_INFIX   => P_TABLENAME
+                                      ,P_POSTFIX => '_MT_PKG'
+                                       --
+                                       )
+                  --
+                   || ' IS';
+    END IF;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_MT_FUN_DCL ---------------------------------------------------------
+  FUNCTION CREATE_MT_FUN_DCL( --
+                             P_TABLENAME   VARCHAR2
+                            ,P_COLUMN_NAME VARCHAR2
+                            ,P_PK_COUNT    NUMBER
+                             --
+                             ) RETURN CLOB IS
+    LV_RESULT  CLOB;
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := 'FUNCTION ' || CREATE_FPV_NAME('MT_', P_COLUMN_NAME, NULL) || CASE
+                   WHEN P_PK_COUNT = 1 THEN
+                    '('
+                   ELSE
+                    '(--' || CHR(10)
+                 END;
+    DELIMITTER := '';
+    I          := 1;
+    FOR C1 IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT := LV_RESULT || DELIMITTER ||
+                   CREATE_PARAMETER_NAME(C1.COLUMN_NAME) || ' ' ||
+                   CREATE_PARAMETER_TYPE(P_TABLENAME, C1.COLUMN_NAME) || CASE
+                     WHEN P_PK_COUNT = 1 THEN
+                      ''
+                     ELSE
+                      '--' || TO_CHAR(I) || '--' || CHR(10)
+                   END;
+      DELIMITTER := ', ';
+      I          := I + 1;
+    END LOOP;
+    LV_RESULT := LV_RESULT || ') RETURN varchar2';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_MT_FUN_BODY --------------------------------------------------------
+  FUNCTION CREATE_MT_FUN_BODY( --
+                              P_TABLENAME VARCHAR2
+                             ,COLUMN_NAME VARCHAR2
+                             ,P_PK_COUNT  NUMBER
+                              --
+                              ) RETURN CLOB IS
+    LV_RESULT  CLOB;
+    DELIMITTER VARCHAR2(10);
+    I          NUMBER;
+  BEGIN
+    LV_RESULT := LV_RESULT || 'LV_RESULT VARCHAR2(1000);' || CHR(10) ||
+                 'begin ';
+    LV_RESULT := LV_RESULT || CHR(10) || 'lv_result:=' ||
+                 CREATE_MTC_FUN_IMPL( --
+                                     P_TABLENAME   => P_TABLENAME
+                                    ,P_COLUMN_NAME => COLUMN_NAME
+                                    ,P_PK_COUNT    => P_PK_COUNT
+                                     --
+                                     );
+    LV_RESULT := LV_RESULT || 'if LV_RESULT is null then begin';
+    LV_RESULT := LV_RESULT || CHR(10) || 'update ' ||
+                 SUBSTR(UPPER(TRIM(P_TABLENAME)), 1, 3) || '.' ||
+                 P_TABLENAME || ' T';
+    LV_RESULT := LV_RESULT || CHR(10) || ' SET ' || COLUMN_NAME ||
+                 ' = NULL ';
+  
+    LV_RESULT := LV_RESULT || CHR(10) || ' WHERE ';
+    -- <WHERE parameters
+    DELIMITTER := '';
+    I          := 1;
+    FOR C IN PK_COLUMNS(P_TABLENAME)
+    LOOP
+      LV_RESULT  := LV_RESULT || CHR(10) || DELIMITTER || C.COLUMN_NAME || '=' ||
+                    CREATE_PARAMETER_NAME(C.COLUMN_NAME) || '--' ||
+                    TO_CHAR(I) || '--';
+      DELIMITTER := ' AND ';
+      I          := I + 1;
+    END LOOP;
+    --WHERE parameters>
+    LV_RESULT := LV_RESULT || CHR(10) || ';';
+    LV_RESULT := LV_RESULT || 'EXCEPTION' || CHR(10) ||
+                 ' WHEN OTHERS THEN ' || CHR(10) ||
+                 'LV_RESULT := ''{پاکسازی ' ||
+                 FIELD_COMMENT_FUN(P_TABLENAME   => P_TABLENAME
+                                  ,P_COLUMN_NAME => COLUMN_NAME) ||
+                 ' انجام نشد: ''||sqlerrm||''}'';' || CHR(10) ||
+                 'END;end if;';
+    LV_RESULT := LV_RESULT || CHR(10) || 'RETURN LV_RESULT;' || CHR(10) ||
+                 'end;';
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_MT_PKG_SPEC -----------------------
+  FUNCTION CREATE_MT_PKG_SPEC(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB; --VARCHAR2(32672);
+    I         NUMBER;
+  BEGIN
+    --GETTER_AND_SETTER
+    I := 1;
+    FOR C IN TABLE_COLUMNS_MT(P_TABLENAME, NULL)
+    LOOP
+      IF NVL(C.IS_PK, 0) != 1
+      THEN
+        LV_RESULT := LV_RESULT || '-- MT_' || C.COLUMN_NAME ||
+                     LPAD('-', 30, '-') || CV_BEAUTY_DASH || CHR(10);
+        LV_RESULT := LV_RESULT || CREATE_MT_FUN_DCL( --
+                                                    P_TABLENAME
+                                                   ,C.COLUMN_NAME
+                                                   ,C.PK_COUNT
+                                                    --
+                                                    ) || ';--' ||
+                     TO_CHAR(I) || '--' || CHR(10);
+      END IF;
+      I := I + 1;
+    END LOOP;
+    --
+  
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  -- CREATE_MT_PKG_BODY ----------------------------------------------------------
+  FUNCTION CREATE_MT_PKG_BODY(P_TABLENAME VARCHAR2) RETURN CLOB IS
+    LV_RESULT CLOB;
+    I         NUMBER;
+  BEGIN
+    I := 1;
+    FOR C IN TABLE_COLUMNS_MT(P_TABLENAME, NULL)
+    LOOP
+      IF NVL(C.IS_PK, 0) != 1
+      THEN
+        LV_RESULT := LV_RESULT || CHR(10) || '-- MT_' || C.COLUMN_NAME ||
+                     CV_BEAUTY_DASH || CHR(10);
+      
+        LV_RESULT := LV_RESULT || CREATE_MT_FUN_DCL( --
+                                                    P_TABLENAME
+                                                   ,C.COLUMN_NAME
+                                                   ,C.PK_COUNT
+                                                    --
+                                                    ) || UPPER(' is ') ||
+                     CHR(10) || CREATE_MT_FUN_BODY( --
+                                                   P_TABLENAME
+                                                  ,C.COLUMN_NAME
+                                                  ,C.PK_COUNT
+                                                   --
+                                                   );
+      END IF;
+      I := I + 1;
+    END LOOP;
+    RETURN UPPER(TRIM(LV_RESULT));
+  END;
+  /**********************************************************************************/
+  FUNCTION MAKE_FLTR_PACKAGE( --
+                             P_TABLENAME      VARCHAR2
+                            ,PACKAGES_CREATED OUT VARCHAR2
+                             --
+                             ) RETURN VARCHAR2 IS
+    LV_SQL_SPEC          CLOB; --clob;--VARCHAR2(32672);
+    LV_SQL_BODY          CLOB; --clob;--VARCHAR2(32672);
+    LV_RESULT            VARCHAR2(32672);
+    LV_FLTR_PACKAGE_NAME VARCHAR2(128);
+  BEGIN
+    IF LV_RESULT IS NULL
+    THEN
+      BEGIN
+        LV_FLTR_PACKAGE_NAME := UPPER(TRIM( --
+                                           CREATE_PACKAGE_NAME( --
+                                                               P_PREFIX  => NULL
+                                                              ,P_INFIX   => P_TABLENAME
+                                                              ,P_POSTFIX => '_FLTR_PKG'
+                                                               --
+                                                               )
+                                           --         CREATE_FLTR_PACKAGE_NAME( P_TABLENAME)
+                                           ));
+        SELECT '{' || LV_FLTR_PACKAGE_NAME || ' از قبل وجود دارد}'
+          INTO LV_RESULT
+          FROM DUAL
+         WHERE EXISTS (SELECT NULL
+                  FROM ALL_OBJECTS O
+                 WHERE O.OBJECT_NAME = LV_FLTR_PACKAGE_NAME);
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          NULL;
+      END;
+      IF LV_RESULT IS NULL
+      THEN
+        LV_SQL_SPEC := LV_SQL_SPEC ||
+                       CREATE_FLTR_PACKAGE_DECLARATN( --
+                                                     P_TABLENAME
+                                                    ,'SPEC'
+                                                     --
+                                                     );
+        LV_SQL_BODY := LV_SQL_BODY ||
+                       CREATE_FLTR_PACKAGE_DECLARATN( --
+                                                     P_TABLENAME
+                                                    ,'BODY'
+                                                     --
+                                                     );
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_GLOBAL_VARIABLES_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_GETTER_SETTER_SPEC(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_GETTER_SETTER_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_CREATE_FILTER_VIEW_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_ADD_TO_FILTER_VIEW_DCLR(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_ADD_TO_FILTER_VIEW_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_REMOVEFROMFILTERVIW_DC(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_REMOVEFROMFILTERVIW_BD(P_TABLENAME => P_TABLENAME);
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_DROP_FILTER_VIEW_DECLAR || ';';
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_DROP_FILTER_VIEW_BODY;
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_COUNT_FILTER_RECORDS_DC || ';';
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_COUNT_FILTER_RECORDS_BD;
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || UPPER('end;');
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || UPPER('end;');
+        BEGIN
+          EXECUTE IMMEDIATE LV_SQL_SPEC;
+          EXECUTE IMMEDIATE LV_SQL_BODY;
+          PACKAGES_CREATED := LV_FLTR_PACKAGE_NAME;
+        EXCEPTION
+          WHEN OTHERS THEN
+            LV_RESULT := '{' || LV_FLTR_PACKAGE_NAME || ' خطا دارد}';
+        END;
+      END IF;
+    END IF;
+    RETURN LV_RESULT;
+  END;
+  /**********************************************************************************/
+  FUNCTION MAKE_FLD_PACKAGE( --
+                            P_TABLENAME      VARCHAR2
+                           ,PACKAGES_CREATED OUT VARCHAR2
+                            --
+                            ) RETURN VARCHAR2 IS
+    LV_SQL_SPEC         CLOB; --clob;--VARCHAR2(32672);
+    LV_SQL_BODY         CLOB; --clob;--VARCHAR2(32672);
+    LV_RESULT           VARCHAR2(32672);
+    LV_FLD_PACKAGE_NAME VARCHAR2(128);
+  BEGIN
+    IF LV_RESULT IS NULL
+    THEN
+      BEGIN
+        LV_FLD_PACKAGE_NAME := UPPER(TRIM(CREATE_PACKAGE_NAME( --
+                                                              P_PREFIX  => NULL
+                                                             ,P_INFIX   => P_TABLENAME
+                                                             ,P_POSTFIX => '_FLD_PKG'
+                                                              --
+                                                              )
+                                          --         CREATE_FLD_PACKAGE_NAME(P_TABLENAME)
+                                          ));
+        SELECT '{' || LV_FLD_PACKAGE_NAME || ' از قبل وجود دارد}'
+          INTO LV_RESULT
+          FROM DUAL
+         WHERE EXISTS (SELECT NULL
+                  FROM ALL_OBJECTS O
+                 WHERE O.OBJECT_NAME = LV_FLD_PACKAGE_NAME);
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          NULL;
+      END;
+      IF LV_RESULT IS NULL
+      THEN
+        LV_SQL_SPEC := LV_SQL_SPEC ||
+                       CREATE_FLD_PACKAGE_DECLARATN( --
+                                                    P_TABLENAME
+                                                   ,'SPEC'
+                                                    --
+                                                    );
+        LV_SQL_BODY := LV_SQL_BODY ||
+                       CREATE_FLD_PACKAGE_DECLARATN( --
+                                                    P_TABLENAME
+                                                   ,'BODY'
+                                                    --
+                                                    );
+        /*
+                LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                               CREATE_GET_DESCRIPTION_DCLRTN(P_TABLENAME => P_TABLENAME) || ';';
+                LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                               CREATE_GET_DESCRIPTION_BODY(P_TABLENAME => P_TABLENAME);
+        */
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_FLD_PKG_SPEC(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_FLD_PKG_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || UPPER('end;');
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || UPPER('end;');
+        BEGIN
+          EXECUTE IMMEDIATE LV_SQL_SPEC;
+          EXECUTE IMMEDIATE LV_SQL_BODY;
+          PACKAGES_CREATED := LV_FLD_PACKAGE_NAME;
+        EXCEPTION
+          WHEN OTHERS THEN
+            LV_RESULT := '{' || LV_FLD_PACKAGE_NAME || ' خطا دارد}';
+        END;
+        --EXECUTE IMMEDIATE 'drop package apps.MAM_APP_MAKER_PKG';
+        /*
+        DBMS_OUTPUT.PUT_LINE(LV_SQL_SPEC);
+        DBMS_OUTPUT.PUT_LINE('/');
+        DBMS_OUTPUT.PUT_LINE(LV_SQL_BODY);
+        */
+      END IF;
+    END IF;
+    RETURN LV_RESULT;
+  END;
+  /**********************************************************************************/
+  FUNCTION MAKE_CTRL_PACKAGE( --
+                             P_TABLENAME      VARCHAR2
+                            ,PACKAGES_CREATED OUT VARCHAR2
+                             --
+                             ) RETURN VARCHAR2 IS
+    LV_SQL_SPEC          CLOB; --clob;--VARCHAR2(32672);
+    LV_SQL_BODY          CLOB; --clob;--VARCHAR2(32672);
+    LV_RESULT            VARCHAR2(32672);
+    LV_CTRL_PACKAGE_NAME VARCHAR2(128);
+  BEGIN
+    IF LV_RESULT IS NULL
+    THEN
+      BEGIN
+        LV_CTRL_PACKAGE_NAME := UPPER(TRIM(CREATE_PACKAGE_NAME( --
+                                                               P_PREFIX  => NULL
+                                                              ,P_INFIX   => P_TABLENAME
+                                                              ,P_POSTFIX => '_CTRL_PKG'
+                                                               --
+                                                               )
+                                           --         CREATE_CTRL_PACKAGE_NAME(P_TABLENAME)
+                                           ));
+        SELECT '{' || LV_CTRL_PACKAGE_NAME || ' از قبل وجود دارد}'
+          INTO LV_RESULT
+          FROM DUAL
+         WHERE EXISTS (SELECT NULL
+                  FROM ALL_OBJECTS O
+                 WHERE O.OBJECT_NAME = LV_CTRL_PACKAGE_NAME);
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          NULL;
+      END;
+      IF LV_RESULT IS NULL
+      THEN
+        LV_SQL_SPEC := LV_SQL_SPEC ||
+                       CREATE_CTRL_PACKAGE_DECLARATN( --
+                                                     P_TABLENAME
+                                                    ,'SPEC'
+                                                     --
+                                                     );
+        LV_SQL_BODY := LV_SQL_BODY ||
+                       CREATE_CTRL_PACKAGE_DECLARATN( --
+                                                     P_TABLENAME
+                                                    ,'BODY'
+                                                     --
+                                                     );
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_GET_DESCRIPTION_DCLRTN(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_GET_DESCRIPTION_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_CHECK_LOCK_DECLARATION(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_INITIATOR_DECLARATION(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_RETRIEVER_DECLARATION(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_CHECK_B4_EDT_NOLOCK_DCL(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_CHECK_B4_RMV_NOLCK_DCL(P_TABLENAME => P_TABLENAME) || ';';
+      
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_CHECK_B4_ADD_DECLARATN(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_CHECK_B4_EDIT_DECLARATN(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_CHECK_B4_REMOVE_DCLR(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_KEY_EXISTS_DECLARATION(P_TABLENAME => P_TABLENAME) || ';';
+        FOR C IN TB_UK(P_TABLENAME)
+        LOOP
+          LV_SQL_SPEC := LV_SQL_SPEC ||
+                         CREATE_UK_EXISTS_DECLARATION( --
+                                                      P_TABLENAME     => P_TABLENAME
+                                                     ,CONSTRAINT_NAME => C.CONSTRAINT_NAME
+                                                      --
+                                                      ) || ';--' || CHR(10);
+        END LOOP;
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_CHECK_LKP_DCL(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_CHECK_MUST_FILLS_DCL(P_TABLENAME => P_TABLENAME) || ';';
+      
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_CHECK_LOCK_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_INITIATOR_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_RETRIEVER_BODY(P_TABLENAME => P_TABLENAME);
+        --LV_SQL_BODY := LV_SQL_BODY || CHR(10) || CREATE_CHECK_DATA_BODY;
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_CHECK_B4_EDIT_NOLCK_BDY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_CHECK_B4_RMV_NOLCK_BD(P_TABLENAME => P_TABLENAME);
+      
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_CHECK_B4_ADD_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_CHECK_B4_EDIT_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_CHECK_B4_REMOVE_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_KEY_EXISTS_BODY(P_TABLENAME => P_TABLENAME);
+        FOR C IN TB_UK(P_TABLENAME)
+        LOOP
+          LV_SQL_BODY := LV_SQL_BODY ||
+                         CREATE_UK_EXISTS_BODY( --
+                                               P_TABLENAME     => P_TABLENAME
+                                              ,CONSTRAINT_NAME => C.CONSTRAINT_NAME
+                                               --
+                                               ) || CHR(10);
+        END LOOP;
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_CHECK_LKP_BDY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_CHECK_MUST_FILLS_BDY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || UPPER('end;');
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || UPPER('end;');
+        BEGIN
+          EXECUTE IMMEDIATE LV_SQL_SPEC;
+          EXECUTE IMMEDIATE LV_SQL_BODY;
+          PACKAGES_CREATED := LV_CTRL_PACKAGE_NAME;
+        EXCEPTION
+          WHEN OTHERS THEN
+            LV_RESULT := '{' || LV_CTRL_PACKAGE_NAME || ' خطا دارد}';
+        END;
+      END IF;
+    END IF;
+    RETURN LV_RESULT;
+  END;
+  /**********************************************************************************/
+  FUNCTION MAKE_APP_PACKAGE( --
+                            P_TABLENAME      VARCHAR2
+                           ,PACKAGES_CREATED OUT VARCHAR2
+                            --
+                            ) RETURN VARCHAR2 IS
+    LV_SQL_SPEC         CLOB; --clob;--VARCHAR2(32672);
+    LV_SQL_BODY         CLOB; --clob;--VARCHAR2(32672);
+    LV_RESULT           VARCHAR2(32672);
+    LV_APP_PACKAGE_NAME VARCHAR2(128);
+  BEGIN
+    IF LV_RESULT IS NULL
+    THEN
+      BEGIN
+        LV_APP_PACKAGE_NAME := UPPER(TRIM(CREATE_PACKAGE_NAME( --
+                                                              P_PREFIX  => NULL
+                                                             ,P_INFIX   => P_TABLENAME
+                                                             ,P_POSTFIX => '_APP_PKG'
+                                                              --
+                                                              )
+                                          --         CREATE_APP_PACKAGE_NAME(P_TABLENAME)
+                                          ));
+        SELECT '{' || LV_APP_PACKAGE_NAME || ' از قبل وجود دارد}'
+          INTO LV_RESULT
+          FROM DUAL
+         WHERE EXISTS (SELECT NULL
+                  FROM ALL_OBJECTS O
+                 WHERE O.OBJECT_NAME = LV_APP_PACKAGE_NAME);
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          NULL;
+      END;
+      IF LV_RESULT IS NULL
+      THEN
+        LV_SQL_SPEC := LV_SQL_SPEC ||
+                       CREATE_APP_PACKAGE_DECLARATION( --
+                                                      P_TABLENAME
+                                                     ,'SPEC'
+                                                      --
+                                                      );
+        LV_SQL_BODY := LV_SQL_BODY ||
+                       CREATE_APP_PACKAGE_DECLARATION( --
+                                                      P_TABLENAME
+                                                     ,'BODY'
+                                                      --
+                                                      );
+        --LV_SQL_BODY  := LV_SQL_BODY || CHR(10) || CREATE_GLOBAL_VARIABLES_BODY;
+        --LV_SQL_SPEC  := LV_SQL_SPEC || CHR(10) || CREATE_GETTER_SETTER_SPEC;
+        --LV_SQL_BODY  := LV_SQL_BODY || CHR(10) || CREATE_GETTER_SETTER_BODY;
+      
+        --LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || CREATE_LOGGER_DECLARATION || ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_ADD_DECLARATION(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_ADD_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_REMOVE_DECLARATION(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_REMOVE_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_EDIT_DECLARATION(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_EDIT_BODY(P_TABLENAME => P_TABLENAME);
+      
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_UPDATE_ATTACH_ID_DCL(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_UPDATE_ATTACH_ID_BODY(P_TABLENAME => P_TABLENAME);
+      
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || UPPER('end;');
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || UPPER('end;');
+        BEGIN
+          EXECUTE IMMEDIATE LV_SQL_SPEC;
+          EXECUTE IMMEDIATE LV_SQL_BODY;
+          PACKAGES_CREATED := LV_APP_PACKAGE_NAME;
+        EXCEPTION
+          WHEN OTHERS THEN
+            LV_RESULT := '{' || LV_APP_PACKAGE_NAME || ' خطا دارد}';
+        END;
+      END IF;
+    END IF;
+    RETURN LV_RESULT;
+  END;
+  /**********************************************************************************/
+  FUNCTION MAKE_MTC_PACKAGE( --
+                            P_TABLENAME      VARCHAR2
+                           ,PACKAGES_CREATED OUT VARCHAR2
+                            --
+                            ) RETURN VARCHAR2 IS
+    LV_SQL_SPEC         CLOB;
+    LV_SQL_BODY         CLOB;
+    LV_RESULT           VARCHAR2(32672);
+    LV_MTC_PACKAGE_NAME VARCHAR2(128);
+  BEGIN
+    IF LV_RESULT IS NULL
+    THEN
+      BEGIN
+        LV_MTC_PACKAGE_NAME := UPPER(TRIM(CREATE_PACKAGE_NAME( --
+                                                              P_PREFIX  => NULL
+                                                             ,P_INFIX   => P_TABLENAME
+                                                             ,P_POSTFIX => '_MTC_PKG'
+                                                              --
+                                                              )));
+        SELECT '{' || LV_MTC_PACKAGE_NAME || ' از قبل وجود دارد}'
+          INTO LV_RESULT
+          FROM DUAL
+         WHERE EXISTS (SELECT NULL
+                  FROM ALL_OBJECTS O
+                 WHERE O.OBJECT_NAME = LV_MTC_PACKAGE_NAME);
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          NULL;
+      END;
+      IF LV_RESULT IS NULL
+      THEN
+        LV_SQL_SPEC := LV_SQL_SPEC ||
+                       CREATE_MTC_PACKAGE_DECLARATN( --
+                                                    P_TABLENAME
+                                                   ,'SPEC'
+                                                    --
+                                                    );
+        LV_SQL_BODY := LV_SQL_BODY ||
+                       CREATE_MTC_PACKAGE_DECLARATN( --
+                                                    P_TABLENAME
+                                                   ,'BODY'
+                                                    --
+                                                    );
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_MTC_PKG_SPEC(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_MTC_PKG_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || UPPER('end;');
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || UPPER('end;');
+        BEGIN
+          EXECUTE IMMEDIATE LV_SQL_SPEC;
+          EXECUTE IMMEDIATE LV_SQL_BODY;
+          PACKAGES_CREATED := LV_MTC_PACKAGE_NAME;
+        EXCEPTION
+          WHEN OTHERS THEN
+            LV_RESULT := '{' || LV_MTC_PACKAGE_NAME || ' خطا دارد}';
+        END;
+      END IF;
+    END IF;
+    RETURN LV_RESULT;
+  END;
+  /**********************************************************************************/
+  FUNCTION MAKE_MT_PACKAGE( --
+                           P_TABLENAME      VARCHAR2
+                          ,PACKAGES_CREATED OUT VARCHAR2
+                           --
+                           ) RETURN VARCHAR2 IS
+    LV_SQL_SPEC        CLOB;
+    LV_SQL_BODY        CLOB;
+    LV_RESULT          VARCHAR2(32672);
+    LV_MT_PACKAGE_NAME VARCHAR2(128);
+  BEGIN
+    IF LV_RESULT IS NULL
+    THEN
+      BEGIN
+        LV_MT_PACKAGE_NAME := UPPER(TRIM(CREATE_PACKAGE_NAME( --
+                                                             P_PREFIX  => NULL
+                                                            ,P_INFIX   => P_TABLENAME
+                                                            ,P_POSTFIX => '_MT_PKG'
+                                                             --
+                                                             )));
+        SELECT '{' || LV_MT_PACKAGE_NAME || ' از قبل وجود دارد}'
+          INTO LV_RESULT
+          FROM DUAL
+         WHERE EXISTS (SELECT NULL
+                  FROM ALL_OBJECTS O
+                 WHERE O.OBJECT_NAME = LV_MT_PACKAGE_NAME);
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          NULL;
+      END;
+      IF LV_RESULT IS NULL
+      THEN
+        LV_SQL_SPEC := LV_SQL_SPEC ||
+                       CREATE_MT_PACKAGE_DECLARATN( --
+                                                   P_TABLENAME
+                                                  ,'SPEC'
+                                                   --
+                                                   );
+        LV_SQL_BODY := LV_SQL_BODY ||
+                       CREATE_MT_PACKAGE_DECLARATN( --
+                                                   P_TABLENAME
+                                                  ,'BODY'
+                                                   --
+                                                   );
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_MT_PKG_SPEC(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_MT_PKG_BODY(P_TABLENAME => P_TABLENAME);
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || UPPER('end;');
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || UPPER('end;');
+        BEGIN
+          EXECUTE IMMEDIATE LV_SQL_SPEC;
+          EXECUTE IMMEDIATE LV_SQL_BODY;
+          PACKAGES_CREATED := LV_MT_PACKAGE_NAME;
+        EXCEPTION
+          WHEN OTHERS THEN
+            LV_RESULT := '{' || LV_MT_PACKAGE_NAME || ' خطا دارد}';
+        END;
+      END IF;
+    END IF;
+    RETURN LV_RESULT;
+  END;
+  /**********************************************************************************/
+  FUNCTION MAKE_WRP_PACKAGE( --
+                            P_TABLENAME      VARCHAR2
+                           ,PACKAGES_CREATED OUT VARCHAR2
+                            --
+                            ) RETURN VARCHAR2 IS
+    LV_SQL_SPEC         CLOB; --clob;--VARCHAR2(32672);
+    LV_SQL_BODY         CLOB; --clob;--VARCHAR2(32672);
+    LV_RESULT           VARCHAR2(32672);
+    LV_WRP_PACKAGE_NAME VARCHAR2(128);
+  BEGIN
+    IF LV_RESULT IS NULL
+    THEN
+      BEGIN
+        LV_WRP_PACKAGE_NAME := UPPER(TRIM(CREATE_PACKAGE_NAME( --
+                                                              P_PREFIX  => NULL
+                                                             ,P_INFIX   => P_TABLENAME
+                                                             ,P_POSTFIX => '_WRP_PKG'
+                                                              --
+                                                              )
+                                          --         CREATE_APP_PACKAGE_NAME(P_TABLENAME)
+                                          ));
+        SELECT '{' || LV_WRP_PACKAGE_NAME || ' از قبل وجود دارد}'
+          INTO LV_RESULT
+          FROM DUAL
+         WHERE EXISTS (SELECT NULL
+                  FROM ALL_OBJECTS O
+                 WHERE O.OBJECT_NAME = LV_WRP_PACKAGE_NAME);
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          NULL;
+      END;
+      IF LV_RESULT IS NULL
+      THEN
+        LV_SQL_SPEC := LV_SQL_SPEC ||
+                       CREATE_WRP_PACKAGE_DECLARATION( --
+                                                      P_TABLENAME
+                                                     ,'SPEC'
+                                                      --
+                                                      );
+        LV_SQL_BODY := LV_SQL_BODY ||
+                       CREATE_WRP_PACKAGE_DECLARATION( --
+                                                      P_TABLENAME
+                                                     ,'BODY'
+                                                      --
+                                                      );
+        /*
+                        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                                       CREATE_ADD_DECLARATION(P_TABLENAME => P_TABLENAME) || ';';
+                        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                                       CREATE_ADD_BODY(P_TABLENAME => P_TABLENAME);
+        */
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_REMOVE_DECLARATION(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                       CREATE_UPDATE_ATTACH_ID_DCL(P_TABLENAME => P_TABLENAME) || ';';
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_REMOVE_IMPLEMENTATION(P_TABLENAME => P_TABLENAME);
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                       CREATE_UPDATE_ATTACH_ID_WRP_BD(P_TABLENAME => P_TABLENAME);
+        /*                               
+                LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) ||
+                               CREATE_EDIT_DECLARATION(P_TABLENAME => P_TABLENAME) || ';';
+                LV_SQL_BODY := LV_SQL_BODY || CHR(10) ||
+                               CREATE_EDIT_BODY(P_TABLENAME => P_TABLENAME);
+        */
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || UPPER('end;');
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || UPPER('begin null; end;');
+        BEGIN
+          EXECUTE IMMEDIATE LV_SQL_SPEC;
+          EXECUTE IMMEDIATE LV_SQL_BODY;
+          PACKAGES_CREATED := LV_WRP_PACKAGE_NAME;
+        EXCEPTION
+          WHEN OTHERS THEN
+            LV_RESULT := '{' || LV_WRP_PACKAGE_NAME || ' خطا دارد}';
+        END;
+      END IF;
+    END IF;
+    RETURN LV_RESULT;
+  END;
+  /**********************************************************************************/
+  FUNCTION MAKE( --
+                P_TABLENAME         VARCHAR2
+               ,PACKAGES_CREATED    OUT VARCHAR2
+               ,CREATE_FLTR_PACKAGE NUMBER DEFAULT 1
+               ,CREATE_FLD_PACKAGE  NUMBER DEFAULT 1
+               ,CREATE_CTRL_PACKAGE NUMBER DEFAULT 1
+               ,CREATE_MTC_PACKAGE  NUMBER DEFAULT 1
+               ,CREATE_MT_PACKAGE   NUMBER DEFAULT 1
+               ,CREATE_APP_PACKAGE  NUMBER DEFAULT 1
+               ,CREATE_WRP_PACKAGE  NUMBER DEFAULT 1
+                --
+                ) RETURN VARCHAR2 IS
+    LV_RESULT           VARCHAR2(32672);
+    LV_PACKAGES_CREATED VARCHAR2(32767);
+  BEGIN
+    IF (TB_UK%ISOPEN)
+    THEN
+      CLOSE TB_UK;
+    END IF;
+    IF (UK_COLUMNS%ISOPEN)
+    THEN
+      CLOSE UK_COLUMNS;
+    END IF;
+    IF (PK_COLUMNS%ISOPEN)
+    THEN
+      CLOSE PK_COLUMNS;
+    END IF;
+    IF (TABLE_COLUMNS%ISOPEN)
+    THEN
+      CLOSE TABLE_COLUMNS;
+    END IF;
+    IF (TABLE_LKP_COLUMNS%ISOPEN)
+    THEN
+      CLOSE TABLE_LKP_COLUMNS;
+    END IF;
+  
+    IF P_TABLENAME IS NULL
+    THEN
+      LV_RESULT := '{نام جدول تهي است}';
+    END IF;
+    --MAKE_FLTR_PACKAGE-------------------------------------------
+    IF LV_RESULT IS NULL
+       AND NVL(CREATE_FLTR_PACKAGE, 1) != 0
+    THEN
+      LV_RESULT := MAKE_FLTR_PACKAGE( --
+                                     P_TABLENAME      => P_TABLENAME
+                                    ,PACKAGES_CREATED => LV_PACKAGES_CREATED
+                                     --
+                                     );
+      IF LV_RESULT IS NULL
+      THEN
+        PACKAGES_CREATED := PACKAGES_CREATED || LV_PACKAGES_CREATED ||
+                            CHR(10);
+      END IF;
+    END IF;
+    --MAKE_FLD_PACKAGE-------------------------------------------
+    IF LV_RESULT IS NULL
+       AND NVL(CREATE_FLD_PACKAGE, 1) != 0
+    THEN
+      LV_RESULT := MAKE_FLD_PACKAGE( --
+                                    P_TABLENAME      => P_TABLENAME
+                                   ,PACKAGES_CREATED => LV_PACKAGES_CREATED
+                                    --
+                                    );
+      IF LV_RESULT IS NULL
+      THEN
+        PACKAGES_CREATED := PACKAGES_CREATED || LV_PACKAGES_CREATED ||
+                            CHR(10);
+      END IF;
+    END IF;
+    --MAKE_CTRL_PACKAGE-------------------------------------------
+    IF LV_RESULT IS NULL
+       AND NVL(CREATE_CTRL_PACKAGE, 1) != 0
+    THEN
+      LV_RESULT := MAKE_CTRL_PACKAGE( --
+                                     P_TABLENAME      => P_TABLENAME
+                                    ,PACKAGES_CREATED => LV_PACKAGES_CREATED
+                                     --
+                                     );
+      IF LV_RESULT IS NULL
+      THEN
+        PACKAGES_CREATED := PACKAGES_CREATED || LV_PACKAGES_CREATED ||
+                            CHR(10);
+      END IF;
+    END IF;
+  
+    --CREATE_APP_PACKAGE-------------------------------------------
+    IF LV_RESULT IS NULL
+       AND NVL(CREATE_APP_PACKAGE, 1) != 0
+    THEN
+      LV_RESULT := MAKE_APP_PACKAGE( --
+                                    P_TABLENAME      => P_TABLENAME
+                                   ,PACKAGES_CREATED => LV_PACKAGES_CREATED
+                                    --
+                                    );
+      IF LV_RESULT IS NULL
+      THEN
+        PACKAGES_CREATED := PACKAGES_CREATED || LV_PACKAGES_CREATED ||
+                            CHR(10);
+      END IF;
+    END IF;
+  
+    --CREATE_MTC_PACKAGE-------------------------------------------
+    IF LV_RESULT IS NULL
+       AND NVL(CREATE_MTC_PACKAGE, 1) != 0
+    THEN
+      LV_RESULT := MAKE_MTC_PACKAGE( --
+                                    P_TABLENAME      => P_TABLENAME
+                                   ,PACKAGES_CREATED => LV_PACKAGES_CREATED
+                                    --
+                                    );
+      IF LV_RESULT IS NULL
+      THEN
+        PACKAGES_CREATED := PACKAGES_CREATED || LV_PACKAGES_CREATED ||
+                            CHR(10);
+      END IF;
+    END IF;
+  
+    --CREATE_MT_PACKAGE-------------------------------------------
+    IF LV_RESULT IS NULL
+       AND NVL(CREATE_MT_PACKAGE, 1) != 0
+    THEN
+      LV_RESULT := MAKE_MT_PACKAGE( --
+                                   P_TABLENAME      => P_TABLENAME
+                                  ,PACKAGES_CREATED => LV_PACKAGES_CREATED
+                                   --
+                                   );
+      IF LV_RESULT IS NULL
+      THEN
+        PACKAGES_CREATED := PACKAGES_CREATED || LV_PACKAGES_CREATED ||
+                            CHR(10);
+      END IF;
+    END IF;
+  
+    --CREATE_WRP_PACKAGE-------------------------------------------
+    IF LV_RESULT IS NULL
+       AND NVL(CREATE_WRP_PACKAGE, 1) != 0
+    THEN
+      LV_RESULT := MAKE_WRP_PACKAGE( --
+                                    P_TABLENAME      => P_TABLENAME
+                                   ,PACKAGES_CREATED => LV_PACKAGES_CREATED
+                                    --
+                                    );
+      IF LV_RESULT IS NULL
+      THEN
+        PACKAGES_CREATED := PACKAGES_CREATED || LV_PACKAGES_CREATED ||
+                            CHR(10);
+      END IF;
+    END IF;
+  
+    RETURN LV_RESULT;
+  END;
+  /**********************************************************************************/
+  FUNCTION INJECT_ROUTINE( --
+                          P_PACKAGE_NAME VARCHAR2
+                         ,P_ROUTINE_NAME VARCHAR2
+                         ,P_SQL_SPEC     CLOB
+                         ,P_SQL_BODY     CLOB
+                          --
+                          ) RETURN VARCHAR2 IS
+    LV_RESULT   VARCHAR2(32672);
+    LV_SQL_SPEC CLOB;
+    LV_SQL_BODY CLOB;
+    --     LV_CTRL_PACKAGE_NAME VARCHAR2(128);
+  BEGIN
+    IF LV_RESULT IS NULL
+    THEN
+      BEGIN
+        SELECT 'روتین ' || P_ROUTINE_NAME || ' از قبل وجود دارد'
+          INTO LV_RESULT
+          FROM DUAL
+         WHERE EXISTS ( --
+                SELECT NULL
+                  FROM ALL_ARGUMENTS A
+                 WHERE 1 = 1
+                   AND (A.PACKAGE_NAME = UPPER(TRIM(P_PACKAGE_NAME)))
+                   AND (A.OBJECT_NAME = UPPER(TRIM(P_ROUTINE_NAME)))
+                --
+                );
+      EXCEPTION
+        WHEN OTHERS THEN
+          NULL;
+      END;
+    END IF;
+    IF LV_RESULT IS NULL
+    THEN
+      FOR C IN ( --
+                SELECT S3.TYPE
+                       ,S3.LINE
+                       ,NVL(S3.TEXT_PACKAGE
+                           ,CASE
+                              WHEN S3.TEXT_END IS NULL THEN
+                               S3.TEXT
+                              ELSE
+                               S3.TEXT_END
+                            END) AS TEXT
+                  FROM ( --
+                         SELECT S2.*
+                                ,CASE
+                                   WHEN S2.LINE = S1.PACKAGE_LINE THEN
+                                    REPLACE(S2.TEXT
+                                           ,'PACKAGE'
+                                           ,'CREATE OR REPLACE PACKAGE')
+                                 END AS TEXT_PACKAGE
+                                ,CASE
+                                   WHEN S2.LINE = S1.END_LINE THEN
+                                    SUBSTR(UPPER(S2.TEXT)
+                                          ,INSTR(UPPER(S2.TEXT), 'END;', -1) + 4
+                                          ,LENGTH(S2.TEXT) - 4)
+                                 
+                                 END AS TEXT_END
+                           FROM ALL_SOURCE S2
+                          INNER JOIN ( --
+                                      SELECT MAX(END_LINE) AS END_LINE
+                                             ,MIN(PACKAGE_LINE) AS PACKAGE_LINE
+                                             ,S0.NAME
+                                             ,S0.TYPE
+                                        FROM ( --
+                                               SELECT CASE
+                                                         WHEN UPPER(S9.TEXT) LIKE
+                                                              UPPER('%END;%') THEN
+                                                          S9.LINE
+                                                       END AS END_LINE
+                                                      ,CASE
+                                                         WHEN UPPER(S9.TEXT) LIKE
+                                                              UPPER('%PACKAGE%') THEN
+                                                          S9.LINE
+                                                       END AS PACKAGE_LINE
+                                                      ,S9.NAME
+                                                      ,S9.TYPE
+                                                 FROM ALL_SOURCE S9
+                                                WHERE S9.NAME = P_PACKAGE_NAME
+                                               --
+                                               ) S0
+                                       GROUP BY S0.NAME, S0.TYPE
+                                      --
+                                      ) S1
+                             ON S1.NAME = S2.NAME
+                            AND S1.TYPE = S2.TYPE
+                          WHERE S2.LINE <= S1.END_LINE
+                         --
+                         ) S3
+                 ORDER BY S3.LINE, S3.TYPE
+                --
+                )
+      LOOP
+        IF C.TYPE = 'PACKAGE'
+        THEN
+          LV_SQL_SPEC := LV_SQL_SPEC || C.TEXT;
+        ELSE
+          LV_SQL_BODY := LV_SQL_BODY || C.TEXT;
+        END IF;
+      END LOOP;
+      IF LV_RESULT IS NULL
+      THEN
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || P_SQL_SPEC;
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || P_SQL_BODY;
+        LV_SQL_SPEC := LV_SQL_SPEC || CHR(10) || UPPER('end;');
+        LV_SQL_BODY := LV_SQL_BODY || CHR(10) || UPPER('end;');
+        BEGIN
+          EXECUTE IMMEDIATE LV_SQL_SPEC;
+          EXECUTE IMMEDIATE LV_SQL_BODY;
+        EXCEPTION
+          WHEN OTHERS THEN
+            LV_RESULT := '{' || P_PACKAGE_NAME || ' خطا دارد}';
+        END;
+      END IF;
+    END IF;
+    RETURN LV_RESULT;
+  END;
+  /**********************************************************************************/
+  FUNCTION INJECT_2APP_PKG( --
+                           P_TABLENAME        VARCHAR2
+                          ,P_ROUTINE_NAME     VARCHAR2
+                          ,P_SQL_SPEC         CLOB
+                          ,P_SQL_BODY         CLOB
+                          ,P_APP_PACKAGE_NAME OUT VARCHAR2
+                           --
+                           ) RETURN VARCHAR2 IS
+    LV_RESULT VARCHAR2(32672);
+    --     LV_CTRL_PACKAGE_NAME VARCHAR2(128);
+  BEGIN
+  
+    P_APP_PACKAGE_NAME := UPPER(TRIM(CREATE_PACKAGE_NAME( --
+                                                         P_PREFIX  => NULL
+                                                        ,P_INFIX   => P_TABLENAME
+                                                        ,P_POSTFIX => '_app_PKG'
+                                                         --
+                                                         )));
+    LV_RESULT          := MAM_APEX_APP_MAKER_PKG.INJECT_ROUTINE( --
+                                                                P_PACKAGE_NAME => P_APP_PACKAGE_NAME
+                                                               ,P_ROUTINE_NAME => P_ROUTINE_NAME
+                                                               ,P_SQL_SPEC     => P_SQL_SPEC || ';'
+                                                               ,P_SQL_BODY     => P_SQL_BODY
+                                                                --
+                                                                );
+    RETURN LV_RESULT;
+  END;
+  /**********************************************************************************/
+  FUNCTION INJECT_GET_DESCRIPTION2CTRLPKG( --
+                                          P_TABLENAME         VARCHAR2
+                                         ,P_CTRL_PACKAGE_NAME OUT VARCHAR2
+                                          --
+                                          ) RETURN VARCHAR2 IS
+    LV_RESULT VARCHAR2(32672);
+    --     LV_CTRL_PACKAGE_NAME VARCHAR2(128);
+    C_ROUTINE_NAME CONSTANT VARCHAR2(100) := 'GET_DESCRIPTION';
+  BEGIN
+  
+    P_CTRL_PACKAGE_NAME := UPPER(TRIM(CREATE_PACKAGE_NAME( --
+                                                          P_PREFIX  => NULL
+                                                         ,P_INFIX   => P_TABLENAME
+                                                         ,P_POSTFIX => '_CTRL_PKG'
+                                                          --
+                                                          )));
+    LV_RESULT           := MAM_APEX_APP_MAKER_PKG.INJECT_ROUTINE( --
+                                                                 P_PACKAGE_NAME => P_CTRL_PACKAGE_NAME
+                                                                ,P_ROUTINE_NAME => C_ROUTINE_NAME
+                                                                ,P_SQL_SPEC     => CREATE_GET_DESCRIPTION_DCLRTN(P_TABLENAME => P_TABLENAME) || ';'
+                                                                ,P_SQL_BODY     => CREATE_GET_DESCRIPTION_BODY(P_TABLENAME => P_TABLENAME)
+                                                                 --
+                                                                 );
+    RETURN LV_RESULT;
+  END;
+
+BEGIN
+  NULL;
+END;
+/

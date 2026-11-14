@@ -36,16 +36,16 @@ SELECT Q.ONHAND_QUANTITY_ID
       ,Q.ATTACH_ID
   FROM MAM.MAM_ONHAND_QUANTITIES Q
  WHERE 1 = 1
-   AND Q.QTY_MONH > 0
-/*
-   AND Q.ITEM_ITEM_ID = (SELECT ITEM_ID
-                           FROM MAM.MAM_ITEMS I
-                          WHERE 1 = 1
-                               --                            AND I.LKP_STA_INVENTORY_ITEM = 1
-                            AND I.COD_ITEM = TRIM('&COD_ITEM')
-                         --
-                         )
-*/
+      --    AND Q.QTY_MONH > 0
+   AND Q.ITEM_ITEM_ID IN (SELECT ITEM_ID
+                            FROM MAM.MAM_ITEMS I
+                           WHERE 1 = 1
+                                --                            AND I.LKP_STA_INVENTORY_ITEM = 1
+                             AND I.COD_ITEM IN (&COD_ITEM)
+                          --                             AND I.COD_ITEM = TRIM('&COD_ITEM')
+                          --                             AND I.ITEM_ID IN (&ITEM_ID)
+                          --
+                          )
 --    AND Q.MSINV_NAM_SUB_INVENTORY_MSINV IN (&NAM_SUB_INVENTORY_MSINV)
 --    AND Q.MSLOC_SUB_INVENTORY_LOCATOR_ID IS NOT NULL
 --   FOR UPDATE

@@ -5,10 +5,7 @@ DECLARE
   LV_VIEW_NAME  VARCHAR2(32) := SUBSTR(SYS_GUID(), 1, 22);
   LV_COMMENT    VARCHAR2(1000);
   CURSOR COLUMN_CURSOR IS
-    SELECT V1.TABLE_NAME
-          ,V1.COLUMN_NAME
-          ,V1.COLUMN_ID
-          ,V1.DATA_TYPE
+    SELECT V1.TABLE_NAME, V1.COLUMN_NAME, V1.COLUMN_ID, V1.DATA_TYPE
       FROM ( --
             SELECT (CASE
                       WHEN EXISTS
@@ -16,10 +13,10 @@ DECLARE
                               FROM ALL_CONSTRAINTS CC
                              INNER JOIN ALL_CONS_COLUMNS TC
                                 ON TC.TABLE_NAME = CC.TABLE_NAME
-                                   AND CC.CONSTRAINT_NAME = TC.CONSTRAINT_NAME
+                               AND CC.CONSTRAINT_NAME = TC.CONSTRAINT_NAME
                              WHERE CC.CONSTRAINT_TYPE = 'P'
-                                   AND CC.TABLE_NAME = V.TABLE_NAME
-                                   AND TC.COLUMN_NAME = V.COLUMN_NAME) THEN
+                               AND CC.TABLE_NAME = V.TABLE_NAME
+                               AND TC.COLUMN_NAME = V.COLUMN_NAME) THEN
                        1
                       ELSE
                        0
@@ -27,34 +24,33 @@ DECLARE
                    ,V.*
               FROM ALL_TAB_COLUMNS V
              WHERE V.TABLE_NAME LIKE UPPER(TRIM(LV_TABLE_NAME))
-                   AND V.COLUMN_NAME NOT IN (
-                                             --
-                                             '-'
-                                             /*
-                                            ,'ATTACH_ID'
-                                            ,'CREATE_DATE'
-                                            ,'CREATE_BY_DB_USER'
-                                            ,'CREATE_BY_APP_USER'
-                                            ,'LAST_UPDATE_DATE'
-                                            ,'LAST_UPDATE_BY_DB_USER'
-                                            ,'LAST_UPDATE_BY_APP_USER'
-                                            */
-                                            ,'LAST_CHANGE_TS'
-                                            ,'MODULE_NAME'
-                                            ,'OS_USERNAME'
-                                            ,'JRN_OPERATION'
-                                            ,'JRN_DB_USER'
-                                            ,'JRN_DATETIME'
-                                            ,'JRN_PROGRAM'
-                                            ,'JRN_ID'
-                                            ,'JRN_APP_USER'
-                                            ,'JRN_OS_USER'
-                                             --
-                                             )
+               AND V.COLUMN_NAME NOT IN (
+                                         --
+                                         '-'
+                                         /*
+                                         ,'ATTACH_ID'
+                                         ,'CREATE_DATE'
+                                         ,'CREATE_BY_DB_USER'
+                                         ,'CREATE_BY_APP_USER'
+                                         ,'LAST_UPDATE_DATE'
+                                         ,'LAST_UPDATE_BY_DB_USER'
+                                         ,'LAST_UPDATE_BY_APP_USER'
+                                         */
+                                        ,'LAST_CHANGE_TS'
+                                        ,'MODULE_NAME'
+                                        ,'OS_USERNAME'
+                                        ,'JRN_OPERATION'
+                                        ,'JRN_DB_USER'
+                                        ,'JRN_DATETIME'
+                                        ,'JRN_PROGRAM'
+                                        ,'JRN_ID'
+                                        ,'JRN_APP_USER'
+                                        ,'JRN_OS_USER'
+                                         --
+                                         )
             --
             ) V1
-     ORDER BY V1.PRIMARY_KEY DESC
-             ,V1.COLUMN_ID;
+     ORDER BY V1.PRIMARY_KEY DESC, V1.COLUMN_ID;
 BEGIN
   SELECT T.OWNER
     INTO LV_SCHEMA
@@ -64,10 +60,10 @@ BEGIN
   DBMS_OUTPUT.PUT_LINE('SELECT ');
 
   FOR C IN COLUMN_CURSOR /*( --
-                                
-                                --
-                                )
-                      */
+                                              
+                                              --
+                                              )
+                                    */
   LOOP
     DBMS_OUTPUT.PUT_LINE(LV_ADDITIVE || 'II.' || C.COLUMN_NAME);
     LV_ADDITIVE := ',';
@@ -81,9 +77,9 @@ BEGIN
                            SUBSTR(C.COLUMN_NAME, 1, 26) || '_DES');
     ELSIF SUBSTR(C.COLUMN_NAME, 1, 4) = 'DAT_'
     THEN
-      DBMS_OUTPUT.PUT_LINE(LV_ADDITIVE || 'TO_CHAR(' || 'II.' ||
-                           C.COLUMN_NAME ||
-                           ', ''YYYY/MM/DD HH24:MI:SS'', ''NLS_CALENDAR=PERSIAN'') AS ' ||
+      DBMS_OUTPUT.PUT_LINE(LV_ADDITIVE ||
+                           'APPS.MAM_HEJRI_DATE_HANDLING_PKG.TO_HEJRI_STRING(P_DATE => ' ||
+                           'II.' || C.COLUMN_NAME || ') AS ' ||
                            SUBSTR(C.COLUMN_NAME, 1, 28) || '_H');
     
     END IF;
@@ -95,7 +91,7 @@ BEGIN
             SELECT CT.OWNER
                    ,CT.TABLE_NAME
                    ,CF.CONSTRAINT_NAME
-                   ,ROW_NUMBER() OVER(ORDER BY CT.OWNER, CT.TABLE_NAME) AS RW
+                   ,ROW_NUMBER() OVER (ORDER BY CT.OWNER, CT.TABLE_NAME) AS RW
               FROM DBA_CONSTRAINTS CT
              INNER JOIN DBA_CONSTRAINTS CF
                 ON CF.R_CONSTRAINT_NAME = CT.CONSTRAINT_NAME
@@ -124,7 +120,7 @@ BEGIN
                   ON CFROM.CONSTRAINT_NAME = CCF.CONSTRAINT_NAME
                INNER JOIN DBA_CONS_COLUMNS CCT
                   ON CTO.CONSTRAINT_NAME = CCT.CONSTRAINT_NAME
-                     AND CCF.POSITION = CCT.POSITION
+                 AND CCF.POSITION = CCT.POSITION
                WHERE CTO.CONSTRAINT_NAME = C.CONSTRAINT_NAME
                ORDER BY CCF.POSITION
               --
@@ -148,25 +144,24 @@ BEGIN
                                (SELECT T.COMMENTS
                                   FROM ALL_COL_COMMENTS T
                                  WHERE 1 = 1
-                                       AND T.COMMENTS IS NOT NULL
-                                       AND T.TABLE_NAME = Z.TABLE_NAME
-                                       AND T.COLUMN_NAME = Z.COLUMN_NAME
-                                       AND UPPER(FND.FND_REPLACE_STRING(TRIM(T.COMMENTS))) NOT IN
-                                       (Z.COLUMN_NAME, FND.FND_REPLACE_STRING('ﬂ·Ìœ «’·Ì'))
-                                       AND ROWNUM = 1)
+                                   AND T.COMMENTS IS NOT NULL
+                                   AND T.TABLE_NAME = Z.TABLE_NAME
+                                   AND T.COLUMN_NAME = Z.COLUMN_NAME
+                                   AND UPPER(FND.FND_REPLACE_STRING(TRIM(T.COMMENTS))) NOT IN
+                                       (Z.COLUMN_NAME
+                                       ,FND.FND_REPLACE_STRING('ﬂ·Ìœ «’·Ì'))
+                                   AND ROWNUM = 1)
                               ELSE
                                Z.COMMENTS
                             END
                             
-                           ,'?')) ) AS CMNT
+                           ,'?'))) AS CMNT
         INTO LV_COMMENT
         FROM ( --
-              SELECT CC.TABLE_NAME
-                     ,CC.COLUMN_NAME
-                     ,CC.COMMENTS
+              SELECT CC.TABLE_NAME, CC.COLUMN_NAME, CC.COMMENTS
                 FROM ALL_COL_COMMENTS CC
                WHERE CC.TABLE_NAME = C.TABLE_NAME
-                     AND CC.COLUMN_NAME = C.COLUMN_NAME
+                 AND CC.COLUMN_NAME = C.COLUMN_NAME
               --
               ) Z;
     EXCEPTION
